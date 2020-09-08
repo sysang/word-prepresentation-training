@@ -58,7 +58,7 @@ class MyCorpus(object):
             dbcollection = self._opt_collection(client)
 
             total = self.total_count
-            batch_size = 100000
+            batch_size = 200000
             start_index = 0
             for index in range(0, math.ceil(total / batch_size)):
                 start_index = index * batch_size
@@ -89,7 +89,7 @@ class MyCorpus(object):
         return random_index, self.get_doc_by_index(random_index)
 
 
-def pick_random_word(model, threshold=100):
+def pick_random_word(model, threshold=500):
     # pick a random word with a suitable number of occurences
     while True:
         word = np.random.choice(model.wv.index2word)
@@ -103,7 +103,7 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     simple_models = [
         # PV-DM w/ concatenation - big, slow, experimental mode
         # window=5 (both sides) approximates paper's apparent 10-word total window size
-        Doc2Vec(workers=12, **common_kwargs),
+        Doc2Vec(workers=6, **common_kwargs),
     ]
 
     if not evaluate:
@@ -250,6 +250,6 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
         print(result)
 
     print("\n")
-    print("             ____________     COMPLETED     _________________________      ")
+    print("             ____________     COMPLETED          ___________________________      ")
     print("#~~~~~~~~###~~~~~~~~~~~~##~~~~~~~~~~~#~~~~~~~~~~~~~~~##~~~~~~~~~~~~###~~~~~~~~~~~~~#")
     print("\n")
