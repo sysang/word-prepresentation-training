@@ -1,8 +1,11 @@
 aclImdb_v1.tar.gz
 bloggercom_mkopper.tar.gz
 enwik8_MattMahoney.tar.gz
+gutenberg.tar.gz
+gutenberg
 .ipynb_checkpoints
 .mypy_cache
 __pycache__
 models
 output
+tryit.py

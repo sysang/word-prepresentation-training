@@ -3,10 +3,10 @@ from pymongo import MongoClient
 from dump_master import extract_documents
 
 
-def imdb(dbcollection):
-    fnames = ['aclImdb_v1.tar.gz']
+def gutenberg(dbcollection):
+    fnames = ['gutenberg.tar.gz']
 
-    regex_fname = re.compile(r'aclImdb/(train|test)/(pos|neg|unsup)/\d+_\d+.txt$')
+    regex_fname = re.compile(r'gutenberg/txt/\S+\.txt$')
     extrax_regexes = []
 
     for fname in fnames:
@@ -14,8 +14,8 @@ def imdb(dbcollection):
 
 
 with MongoClient('172.17.0.1', 27017, username='myUserAdmin', password='111') as client:
-    db = client.imdb_reviews
-    dbcollection = db.reviews
+    db = client.gutenberg
+    dbcollection = db.books
     dbcollection.delete_many({})
-    imdb(dbcollection)
-    db.command({"reIndex": "reviews"})
+    gutenberg(dbcollection)
+    db.command({"reIndex": "books"})

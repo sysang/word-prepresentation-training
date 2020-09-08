@@ -103,7 +103,7 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     simple_models = [
         # PV-DM w/ concatenation - big, slow, experimental mode
         # window=5 (both sides) approximates paper's apparent 10-word total window size
-        Doc2Vec(workers=6, **common_kwargs),
+        Doc2Vec(workers=10, **common_kwargs),
     ]
 
     if not evaluate:

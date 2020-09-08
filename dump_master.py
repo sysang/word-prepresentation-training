@@ -38,8 +38,10 @@ def extract_documents(fname, dbcollection, regex_fname, extrax_regexes=[]):
     tag = dbcollection.count_documents({})
     with tarfile.open(fname, mode='r:gz') as tar:
         for member in tar.getmembers():
+            # print(member.name)
 
             if regex_fname.match(member.name):
+                # print(member.name)
                 member_bytes = tar.extractfile(member).read()
                 member_text = member_bytes.decode('utf-8', errors='replace')
 

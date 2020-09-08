@@ -7,5 +7,8 @@ dump_imdb:
 dump_enwik8:
 	python dump_enwik8_to_mongodb.py
 
-dump_corpuses: 
+dump_gutenberg:
+	python dump_gutenberg_to_mongodb.py
+
+dump_corpuses:
 	python dump_corpuses.py
