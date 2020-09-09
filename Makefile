@@ -1,3 +1,6 @@
+tryit:
+	python tryit.py
+
 dump_blog:
 	python dump_blogcorpus_to_mongodb.py
 

@@ -6,8 +6,25 @@ from dump_master import extract_documents
 def gutenberg(dbcollection):
     fnames = ['gutenberg.tar.gz']
 
-    regex_fname = re.compile(r'gutenberg/txt/\S+\.txt$')
-    extrax_regexes = []
+    repl = " "
+    regex_fname = re.compile(r'Gutenberg/txt/\S+\.txt$')
+    regex_newline = re.compile(r"\r\n")
+    regex01 = re.compile(r"\[Illustration\:\s.+\]")
+    regex02 = re.compile(r"\[Illustration\:\s.+")
+    regex03 = re.compile(r"\{\d+\}\s+.+")
+    regex04 = re.compile(r"([A-Z]\s*[A-Z\.\,\-\'\[\]]+\s*)+")
+    regex05 = re.compile(r"\([A-Z\s]*\)")
+    regex06 = re.compile(r"[A-Z]\w+:\s+[A-Z][\w\s]+")
+
+    extrax_regexes = [
+            (regex_newline, repl),
+            (regex01, repl),
+            (regex02, repl),
+            (regex03, repl),
+            (regex04, repl),
+            (regex05, repl),
+            (regex06, repl)
+            ]
 
     for fname in fnames:
         extract_documents(fname, dbcollection, regex_fname, extrax_regexes)
