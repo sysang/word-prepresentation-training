@@ -13,9 +13,9 @@ def imdb(dbcollection):
         extract_documents(fname, dbcollection, regex_fname, extrax_regexes)
 
 
-with MongoClient('172.17.0.1', 27017, username='myUserAdmin', password='111') as client:
-    db = client.imdb_reviews
-    dbcollection = db.reviews
-    dbcollection.delete_many({})
-    imdb(dbcollection)
-    db.command({"reIndex": "reviews"})
+if __name__ == "__main__":
+    with MongoClient('172.17.0.1', 27017, username='myUserAdmin', password='111') as client:
+        db = client.imdb_reviews
+        dbcollection = db.reviews
+        imdb(dbcollection)
+        db.command({"reIndex": "reviews"})

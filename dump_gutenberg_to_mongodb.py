@@ -30,9 +30,9 @@ def gutenberg(dbcollection):
         extract_documents(fname, dbcollection, regex_fname, extrax_regexes)
 
 
-with MongoClient('172.17.0.1', 27017, username='myUserAdmin', password='111') as client:
-    db = client.gutenberg
-    dbcollection = db.books
-    dbcollection.delete_many({})
-    gutenberg(dbcollection)
-    db.command({"reIndex": "books"})
+if __name__ == "__main__":
+    with MongoClient('172.17.0.1', 27017, username='myUserAdmin', password='111') as client:
+        db = client.gutenberg
+        dbcollection = db.books
+        gutenberg(dbcollection)
+        db.command({"reIndex": "books"})

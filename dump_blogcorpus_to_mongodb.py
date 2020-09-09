@@ -15,9 +15,9 @@ def blog(dbcollection):
         extract_documents(fname, dbcollection, regex_fname, extrax_regexes)
 
 
-with MongoClient('172.17.0.1', 27017, username='myUserAdmin', password='111') as client:
-    db = client.bloggercom
-    dbcollection = db.posts
-    dbcollection.delete_many({})
-    blog(dbcollection)
-    db.command({"reIndex": "posts"})
+if __name__ == "__main__":
+    with MongoClient('172.17.0.1', 27017, username='myUserAdmin', password='111') as client:
+        db = client.bloggercom
+        dbcollection = db.posts
+        blog(dbcollection)
+        db.command({"reIndex": "posts"})

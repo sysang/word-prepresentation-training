@@ -15,9 +15,9 @@ def enwik8(dbcollection):
         extract_documents(fname, dbcollection, regex_fname, extrax_regexes)
 
 
-with MongoClient('172.17.0.1', 27017, username='myUserAdmin', password='111') as client:
-    db = client.enwik8
-    dbcollection = db.docs
-    dbcollection.delete_many({})
-    enwik8(dbcollection)
-    db.command({"reIndex": "docs"})
+if __name__ == "__main__":
+    with MongoClient('172.17.0.1', 27017, username='myUserAdmin', password='111') as client:
+        db = client.enwik8
+        dbcollection = db.docs
+        enwik8(dbcollection)
+        db.command({"reIndex": "docs"})

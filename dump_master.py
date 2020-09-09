@@ -92,7 +92,7 @@ def extract_documents(fname, dbcollection, regex_fname, extrax_regexes=[]):
                         bulk_size += 1
                         tag += 1
 
-                        if bulk_size >= 100000:
+                        if bulk_size >= 10000:
                             print(doc['text'])
                             dbcollection.insert_many(docs)
                             docs.clear()
