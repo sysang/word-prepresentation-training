@@ -10,6 +10,9 @@ dump_imdb:
 dump_enwik8:
 	python dump_enwik8_to_mongodb.py
 
+dump_enwik9:
+	python dump_enwik9_to_mongodb.py
+
 dump_gutenberg:
 	python dump_gutenberg_to_mongodb.py
 

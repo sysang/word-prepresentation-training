@@ -9,6 +9,8 @@ if __name__ == "__main__":
         db = client.mycorus
         dbcollection = db.docs
 
+        dbcollection.delete_many({})
+
         gutenberg(dbcollection)
         imdb(dbcollection)
         blog(dbcollection)
