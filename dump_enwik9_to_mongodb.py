@@ -3,7 +3,7 @@ from pymongo import MongoClient
 from dump_master import extract_documents
 
 
-def enwik8(dbcollection):
+def enwik9(dbcollection):
     fnames = ['enwik9_MattMahoney.tar.gz']
 
     regex_fname = re.compile(r'enwik9-preprocessed\/[A-Z][A-Z]\/wiki_\d\d')
@@ -21,6 +21,6 @@ if __name__ == "__main__":
         dbcollection = db.docs
         dbcollection.delete_many({})
 
-        enwik8(dbcollection)
+        enwik9(dbcollection)
 
         db.command({"reIndex": "docs"})

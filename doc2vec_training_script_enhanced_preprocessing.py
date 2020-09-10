@@ -53,12 +53,16 @@ class MyCorpus(object):
             db = client.mycorus
             return db.docs
 
+        if self.dataset == 'thefinal':
+            db = client.thefinal
+            return db.docs
+
     def __iter__(self):
         with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
             dbcollection = self._opt_collection(client)
 
             total = self.total_count
-            batch_size = 200000
+            batch_size = 50000
             start_index = 0
             for index in range(0, math.ceil(total / batch_size)):
                 start_index = index * batch_size
@@ -89,7 +93,7 @@ class MyCorpus(object):
         return random_index, self.get_doc_by_index(random_index)
 
 
-def pick_random_word(model, threshold=500):
+def pick_random_word(model, threshold=1000):
     # pick a random word with a suitable number of occurences
     while True:
         word = np.random.choice(model.wv.index2word)
@@ -103,7 +107,7 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     simple_models = [
         # PV-DM w/ concatenation - big, slow, experimental mode
         # window=5 (both sides) approximates paper's apparent 10-word total window size
-        Doc2Vec(workers=10, **common_kwargs),
+        Doc2Vec(workers=5, **common_kwargs),
     ]
 
     if not evaluate:
@@ -159,7 +163,7 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
         print('[+] ... "%s"' % (random_doc))
         for model in simple_models:
             inferred_docvec = model.infer_vector(random_doc.split(' '))
-            print('%s' % (model.docvecs.most_similar([inferred_docvec], topn=5)))
+            print('%s' % (model.docvecs.most_similar([inferred_docvec], topn=10)))
             print("\n")
 
     # Do close documents seem more related than distant ones?
@@ -187,11 +191,12 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     print("Do the word vectors show useful similarities?")
     print("-----------------------------------------------------")
 
-    target_word = pick_random_word(simple_models[0])
-    for model in simple_models:
-        print('target_word: %r model: %s similar words:' % (target_word, model))
-        for i, (word, sim) in enumerate(model.wv.most_similar(target_word, topn=20), 1):
-            print('     %d. %.2f %r' % (i, sim, word))
+    for ind in range(0, 5):
+        target_word = pick_random_word(simple_models[0])
+        for model in simple_models:
+            print('target_word: %r model: %s similar words:' % (target_word, model))
+            for i, (word, sim) in enumerate(model.wv.most_similar(target_word, topn=7), 1):
+                print('     %d. %.2f %r' % (i, sim, word))
 
     # Are the word vectors from this dataset any good at analogies?
     # -------------------------------------------------------------
