@@ -158,13 +158,24 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     print("Are inferred vectors close to the precalculated ones?")
     print("-----------------------------------------------------")
 
+    topn = 100
     for ind in range(0, 7):
         random_index, random_doc = alldocs.get_random_doc()
-        print('[+] ... "%s"' % (random_doc))
+        print('[+] index %s -> "%s"' % (random_index, random_doc))
         for model in simple_models:
             inferred_docvec = model.infer_vector(random_doc.split(' '))
-            print('%s' % (model.docvecs.most_similar([inferred_docvec], topn=10)))
-            print("\n")
+            similarities = model.docvecs.most_similar([inferred_docvec], topn=topn)
+            rank = 1
+            for (index, score) in similarities:
+                if index == random_index:
+                    print('** Matched with rank %s, score: %s' % (rank, score))
+                    print("\n")
+                    break
+                rank += 1
+            if rank == topn + 1:
+                print("!! No any match in top %s similarities" % (topn))
+                print("\n")
+
 
     # Do close documents seem more related than distant ones?
     # -------------------------------------------------------
@@ -194,9 +205,10 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     for ind in range(0, 5):
         target_word = pick_random_word(simple_models[0])
         for model in simple_models:
-            print('target_word: %r model: %s similar words:' % (target_word, model))
+            print('[+] target_word: %r model: %s:' % (target_word, model))
             for i, (word, sim) in enumerate(model.wv.most_similar(target_word, topn=7), 1):
                 print('     %d. %.2f %r' % (i, sim, word))
+            print("\n")
 
     # Are the word vectors from this dataset any good at analogies?
     # -------------------------------------------------------------
@@ -222,6 +234,7 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
         score, sections = model.wv.evaluate_word_analogies('questions-words.txt')
         correct, incorrect = len(sections[-1]['correct']), len(sections[-1]['incorrect'])
         print('%s: %0.2f%% correct (%d of %d)' % (model, float(correct*100)/(correct+incorrect), correct, correct+incorrect))
+
 
     # Benchmark against analogies metric baseline
     # -------------------------------------------------------------
