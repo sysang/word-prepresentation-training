@@ -19,6 +19,9 @@ import smart_open
 from pymongo import MongoClient
 import pymongo
 
+import pika
+import uuid
+
 import logging
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
@@ -31,10 +34,47 @@ DB_USER = 'bottrainer'
 DB_UPASS = '111'
 
 
+class CorpusRpcClient(object):
+
+    def __init__(self):
+        self.connection = pika.BlockingConnection(
+            pika.ConnectionParameters(host='localhost'))
+
+        self.channel = self.connection.channel()
+
+        result = self.channel.queue_declare(queue='', exclusive=True)
+        self.callback_queue = result.method.queue
+
+        self.channel.basic_consume(
+            queue=self.callback_queue,
+            on_message_callback=self.on_response,
+            auto_ack=True)
+
+    def on_response(self, ch, method, props, body):
+        if self.corr_id == props.correlation_id:
+            self.response = body
+
+    def call(self):
+        self.response = None
+        self.corr_id = str(uuid.uuid4())
+        self.channel.basic_publish(
+            exchange='',
+            routing_key='rpc_queue',
+            properties=pika.BasicProperties(
+                reply_to=self.callback_queue,
+                correlation_id=self.corr_id,
+            ),
+            body='')
+        while self.response is None:
+            self.connection.process_data_events()
+        return self.response
+
+
 class MyCorpus(object):
     def __init__(self, name):
         self.dataset = name
         self.total_count = self.count()
+        self.rpc_client = CorpusRpcClient()
 
     def _opt_collection(self, client):
         if self.dataset == 'imdb':
@@ -57,21 +97,13 @@ class MyCorpus(object):
             db = client.thefinal
             return db.docs
 
+        raise Exception("No valid database")
+
     def __iter__(self):
-        with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
-            dbcollection = self._opt_collection(client)
+        response = self.rpc_client.call()
+        parsed = response.split(']|[', 1)
 
-            total = self.total_count
-            batch_size = 50000
-            start_index = 0
-            for index in range(0, math.ceil(total / batch_size)):
-                start_index = index * batch_size
-                end_index = start_index + batch_size if (start_index + batch_size) < total else total
-                cursor = dbcollection.find(projection={"_id": False})
-                reviews_batch = list(cursor[start_index:end_index])
-
-                for line in reviews_batch:
-                    yield SentimentDocument(line['text'].split(' '), [int(line['tag'])])
+        yield SentimentDocument(parsed[1].split(' '), [int(parsed[0])])
 
     def get_doc_by_index(self, index):
         with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
@@ -107,7 +139,7 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     simple_models = [
         # PV-DM w/ concatenation - big, slow, experimental mode
         # window=5 (both sides) approximates paper's apparent 10-word total window size
-        Doc2Vec(workers=5, **common_kwargs),
+        Doc2Vec(workers=5, queue_factor=8, **common_kwargs),
     ]
 
     if not evaluate:
