@@ -19,9 +19,6 @@ import smart_open
 from pymongo import MongoClient
 import pymongo
 
-import pika
-import uuid
-
 import logging
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
@@ -33,51 +30,11 @@ DB_PORT = 27017
 DB_USER = 'bottrainer'
 DB_UPASS = '111'
 
-credentials = pika.PlainCredentials('myrabbit', '111')
-
-
-class CorpusRpcClient(object):
-
-    def __init__(self, host, credentials):
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=host, credentials=credentials))
-
-        self.channel = self.connection.channel()
-
-        result = self.channel.queue_declare(queue='', exclusive=True)
-        self.callback_queue = result.method.queue
-
-        self.channel.basic_consume(
-            queue=self.callback_queue,
-            on_message_callback=self.on_response,
-            auto_ack=True)
-
-    def on_response(self, ch, method, props, body):
-        if self.corr_id == props.correlation_id:
-            self.response = body
-
-    def call(self):
-        self.response = None
-        self.corr_id = str(uuid.uuid4())
-        self.channel.basic_publish(
-            exchange='',
-            routing_key='rpc_queue',
-            properties=pika.BasicProperties(
-                reply_to=self.callback_queue,
-                correlation_id=self.corr_id,
-            ),
-            body='')
-        while self.response is None:
-            self.connection.process_data_events()
-        return self.response
-
 
 class MyCorpus(object):
     def __init__(self, name):
         self.dataset = name
         self.total_count = self.count()
-        self.rpc_client1 = CorpusRpcClient('172.19.0.2', credentials)
-        self.rpc_client2 = CorpusRpcClient('172.19.0.3', credentials)
-        self.rpc_client3 = CorpusRpcClient('172.19.0.4', credentials)
 
     def _opt_collection(self, client):
         if self.dataset == 'imdb':

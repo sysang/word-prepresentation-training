@@ -8,10 +8,11 @@ from pymongo import MongoClient
 import pika
 
 parser = argparse.ArgumentParser(description='Rabbitmq RPC corpus channel')
-parser.add_argument('--collection')
+parser.add_argument('--database')
 args = parser.parse_args()
 
-connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+credentials = pika.PlainCredentials('myrabbit', '111')
+connection = pika.BlockingConnection(pika.ConnectionParameters(host='172.19.0.2', credentials=credentials))
 
 channel = connection.channel()
 
@@ -22,16 +23,16 @@ DB_PORT = 27017
 DB_USER = 'bottrainer'
 DB_UPASS = '111'
 
-qsize = 400
+qsize = 40000
 d = deque(maxlen=qsize)
 
 
 def opt_collection(client):
-    collection = args.collection
-    if not collection:
+    database = args.database
+    if not database:
         raise Exception("No mongodb database specified")
 
-    if collection == 'thefinal':
+    if database == 'thefinal':
         db = client.thefinal
         return db.docs
 
@@ -47,7 +48,7 @@ def corpus_buf():
         dbcollection = opt_collection(client)
 
         total = count_documents(dbcollection)
-        batch_size = 4000
+        batch_size = qsize * 3
         start_index = 0
         for index in range(0, math.ceil(total / batch_size)):
             start_index = index * batch_size

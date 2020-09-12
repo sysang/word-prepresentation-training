@@ -1,5 +1,6 @@
 # coding: utf-8
-import doc2vec_training_script_enhanced_preprocessing as base
+# import doc2vec_training_script_rabbitmq_connect as base
+import doc2vec_training_script_mongodb_connect as base
 
 common_kwargs = dict(
     vector_size=15, negative=4, window=2, min_count=23, sample=0.01,
