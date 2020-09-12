@@ -15,6 +15,7 @@ import gensim.models.doc2vec
 import numpy as np
 
 from collections import OrderedDict
+from collections import deque
 import smart_open
 from pymongo import MongoClient
 import pymongo
@@ -32,9 +33,14 @@ DB_UPASS = '111'
 
 
 class MyCorpus(object):
+    """
+    max character number in sentence: 22127
+    """
     def __init__(self, name):
         self.dataset = name
+        self.batch_size = 100000
         self.total_count = self.count()
+        self.buffers = []
 
     def _opt_collection(self, client):
         if self.dataset == 'imdb':
@@ -57,24 +63,38 @@ class MyCorpus(object):
             db = client.thefinal
             return db.docs
 
-        raise Exception("No valid database")
-
     def __iter__(self):
-        while True:
-            response = self.rpc_client1.call()
-            parsed = response.decode('utf-8')
-            parsed = parsed.split(']|[', 1)
-            yield SentimentDocument(parsed[1].split(' '), [int(parsed[0])])
+        for text_buffer, tag_buffer in self.buffers:
+            for i in range(len(text_buffer)):
+                text = text_buffer[i]
+                tag = tag_buffer[i]
+                yield SentimentDocument(text.split(' '), [tag])
 
-            # response = self.rpc_client2.call()
-            # parsed = response.decode('utf-8')
-            # parsed = parsed.split(']|[', 1)
-            # yield SentimentDocument(parsed[1].split(' '), [int(parsed[0])])
+    def cache_data(self):
+        with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
+            dbcollection = self._opt_collection(client)
 
-            # response = self.rpc_client3.call()
-            # parsed = response.decode('utf-8')
-            # parsed = parsed.split(']|[', 1)
-            # yield SentimentDocument(parsed[1].split(' '), [int(parsed[0])])
+            total = self.total_count
+            batch_size = self.batch_size
+            # start_index = 0
+            text_buffer = []
+            tag_buffer = []
+            for index in range(0, math.floor(total / batch_size)):
+                print("Caching batch index: %d" % (index))
+                # start_index = index * batch_size
+                # end_index = start_index + batch_size if (start_index + batch_size) < total else total
+                cursor = dbcollection.find({'batch_index': index}, projection={"_id": False})
+                reviews_batch = list(cursor)
+                text_buffer = []
+                tag_buffer = []
+                for line in reviews_batch:
+                    text_buffer.append(line['text'])
+                    tag_buffer.append(int(line['tag']))
+                print('text_buffer length %d' % (len(text_buffer)))
+                print('tag_buffer length %d' % (len(tag_buffer)))
+
+                self.buffers.append((text_buffer, tag_buffer))
+                print('buffers length %d' % (len(self.buffers)))
 
     def get_doc_by_index(self, index):
         with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
@@ -105,19 +125,20 @@ def pick_random_word(model, threshold=1000):
 
 
 def train(name, common_kwargs, saved_fname, evaluate=False):
-    alldocs = MyCorpus(name)
+    mycorpus = MyCorpus(name)
+    mycorpus.cache_data()
 
     simple_models = [
         # PV-DM w/ concatenation - big, slow, experimental mode
         # window=5 (both sides) approximates paper's apparent 10-word total window size
-        Doc2Vec(workers=5, queue_factor=8, **common_kwargs),
+        Doc2Vec(workers=8, queue_factor=64, **common_kwargs),
     ]
 
     if not evaluate:
         for model in simple_models:
-            model.build_vocab(alldocs)
+            model.build_vocab(mycorpus)
             print("%s vocabulary scanned & state initialized" % model)
-            model.train(alldocs, total_examples=alldocs.total_count, epochs=model.epochs)
+            model.train(mycorpus, total_examples=mycorpus.total_count, epochs=model.epochs)
     else:
         simple_models = [
             # PV-DM w/ concatenation - big, slow, experimental mode
@@ -163,7 +184,7 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
 
     topn = 100
     for ind in range(0, 7):
-        random_index, random_doc = alldocs.get_random_doc()
+        random_index, random_doc = mycorpus.get_random_doc()
         print('[+] index %s -> "%s"' % (random_index, random_doc))
         for model in simple_models:
             inferred_docvec = model.infer_vector(random_doc.split(' '))
@@ -179,7 +200,6 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
                 print("!! No any match in top %s similarities" % (topn))
                 print("\n")
 
-
     # Do close documents seem more related than distant ones?
     # -------------------------------------------------------
     print("\n")
@@ -190,12 +210,12 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     doc_id = np.random.randint(simple_models[0].docvecs.count)  # pick random doc, re-run cell for more examples
     model = simple_models[0]
     sims = model.docvecs.most_similar(doc_id, topn=model.docvecs.count)  # get *all* similar documents
-    print(u'TARGET (%d): %s\n' % (doc_id, alldocs.get_doc_by_index(doc_id)))
+    print(u'TARGET (%d): %s\n' % (doc_id, mycorpus.get_doc_by_index(doc_id)))
     print(u'SIMILAR/DISSIMILAR DOCS PER MODEL %s:\n' % (str(model)))
     for label, index in [('MOST', 0), ('MEDIAN', len(sims)//2), ('LEAST', len(sims) - 1)]:
         s = sims[index]
         i = int(sims[index][0])
-        words = alldocs.get_doc_by_index(i)
+        words = mycorpus.get_doc_by_index(i)
         print(u'%s %s: «%s»\n' % (label, s, words))
 
     # Do the word vectors show useful similarities?

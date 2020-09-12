@@ -45,4 +45,9 @@ class MongodbRpcClient(object):
 fibonacci_rpc = MongodbRpcClient()
 
 response = fibonacci_rpc.call()
-print(" [.] Got %s" % response)
+
+if not response:
+    print("Client should stop iteration")
+else:
+    print(" [.] Got %s" % response)
+

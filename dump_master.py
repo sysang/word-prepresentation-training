@@ -1,6 +1,7 @@
 from pymongo import MongoClient
 import tarfile
 import re
+import math
 
 
 def repl_process_prime_s(matchobj):
@@ -33,9 +34,12 @@ def extract_documents(fname, dbcollection, regex_fname, extrax_regexes=[]):
     regex_double_spaces = re.compile(r"\s\s")
     regex_min_five = re.compile(r"\S(\s\S+){8}")
 
-    bulk_size = 0
+    bulk_vol = 0
     docs = []
     tag = dbcollection.count_documents({})
+    batch_size = 100000
+    batch_index = math.floor(tag / batch_size)
+    max_length = 1
     with tarfile.open(fname, mode='r:gz') as tar:
         for member in tar.getmembers():
             # print(member.name)
@@ -87,14 +91,24 @@ def extract_documents(fname, dbcollection, regex_fname, extrax_regexes=[]):
                         if not regex_min_five.search(text):
                             continue
 
-                        doc = {'text': text, 'tag': tag}
+                        length = len(text)
+                        if length > max_length:
+                            max_length = length
+
+                        doc = {'text': text, 'tag': tag, 'batch_index': batch_index}
                         docs.append(doc)
-                        bulk_size += 1
+                        bulk_vol += 1
                         tag += 1
 
-                        if bulk_size >= 10000:
+                        if tag % batch_size == 0:
+                            batch_index += 1
+                            print("\n")
+                            print('-----------  BATCH INDEX: %s' % (batch_index) + '  --------------')
+
+                        if bulk_vol >= 10000:
                             print(doc['text'])
                             dbcollection.insert_many(docs)
                             docs.clear()
-                            bulk_size = 0
+                            bulk_vol = 0
 
+    print("*** MAXIMUM SENTENCE LENGTH: " + str(max_length))
