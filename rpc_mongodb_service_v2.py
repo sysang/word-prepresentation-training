@@ -13,7 +13,7 @@ parser.add_argument('--database')
 args = parser.parse_args()
 
 # credentials = pika.PlainCredentials('myrabbit', '111')
-connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost', heartbeat=0))
+connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
 
 channel = connection.channel()
 
@@ -53,7 +53,7 @@ def data_buf():
             total = count_documents(dbcollection)
 
             count = 1
-            for index in range(0, math.ceil(total / batch_size)):
+            for index in range(0, math.floor(total / batch_size)):
                 print("Caching batch index: %d" % (index))
 
                 cursor = dbcollection.find({'batch_index': index}, projection={"_id": False})

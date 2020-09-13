@@ -33,13 +33,13 @@ DB_PORT = 27017
 DB_USER = 'bottrainer'
 DB_UPASS = '111'
 
-credentials = pika.PlainCredentials('myrabbit', '111')
+# credentials = pika.PlainCredentials('myrabbit', '111')
 
 
 class CorpusRpcClient(object):
 
-    def __init__(self, host, credentials):
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=host, credentials=credentials))
+    def __init__(self, host, credentials=None):
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=host, heartbeat=0))
 
         self.channel = self.connection.channel()
 
@@ -75,9 +75,7 @@ class MyCorpus(object):
     def __init__(self, name):
         self.dataset = name
         self.total_count = self.count()
-        self.rpc_client1 = CorpusRpcClient('172.19.0.2', credentials)
-        self.rpc_client2 = CorpusRpcClient('172.19.0.3', credentials)
-        self.rpc_client3 = CorpusRpcClient('172.19.0.4', credentials)
+        self.rpc_client1 = CorpusRpcClient('localhost')
 
     def _opt_collection(self, client):
         if self.dataset == 'imdb':
@@ -103,38 +101,18 @@ class MyCorpus(object):
         raise Exception("No valid database")
 
     def __iter__(self):
-        stop = False
-        while not stop:
+        while True:
             response = self.rpc_client1.call()
-            if not response:
-                stop = True
             parsed = response.decode('utf-8')
-            parsed = parsed.split(']![')
-            for doc in parsed:
-                if not doc:
-                    continue
-                tag, text = doc.split('[!]', 1)
-                yield SentimentDocument(text.split(' '), [int(tag)])
+            if not response or parsed == '<!END!>':
+                break
 
-            response = self.rpc_client2.call()
-            if not response:
-                stop = True
-            parsed = response.decode('utf-8')
             parsed = parsed.split(']![')
             for doc in parsed:
                 if not doc:
                     continue
-                tag, text = doc.split('[!]', 1)
-                yield SentimentDocument(text.split(' '), [int(tag)])
-
-            response = self.rpc_client3.call()
-            if not response:
-                stop = True
-            parsed = response.decode('utf-8')
-            parsed = parsed.split(']![')
-            for doc in parsed:
-                if not doc:
-                    continue
+                if len(doc.split('[!]', 1)) < 2:
+                    print("DEBUG:: doc -> %s" % (doc))
                 tag, text = doc.split('[!]', 1)
                 yield SentimentDocument(text.split(' '), [int(tag)])
 
