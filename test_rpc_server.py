@@ -3,14 +3,14 @@ import pika
 import uuid
 
 credentials = pika.PlainCredentials('myrabbit', '111')
-host = "172.19.0.2"
+host = "localhost"
 
 
 class MongodbRpcClient(object):
 
     def __init__(self):
         self.connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host=host, credentials=credentials))
+            pika.ConnectionParameters(host=host))
 
         self.channel = self.connection.channel()
 
@@ -44,10 +44,32 @@ class MongodbRpcClient(object):
 
 fibonacci_rpc = MongodbRpcClient()
 
-response = fibonacci_rpc.call()
+while True:
+    response = fibonacci_rpc.call()
 
-if not response:
-    print("Client should stop iteration")
-else:
-    print(" [.] Got %s" % response)
+    if not response:
+        print("Client should stop iteration")
+        break
+
+    response = response.decode('utf-8')
+    splited = response.split(']![')
+
+    next, _ = splited[0].split('[!]', 1)
+    next = int(next)
+    print("first tag of batch:  %d" % (next))
+
+    for s in splited:
+
+        try:
+            tag, _ = s.split('[!]', 1)
+        except Exception as e:
+            print(s)
+            raise e
+
+        if int(tag) != next:
+            print("tag - %s vs next - %s" % (tag, next))
+            raise Exception("There is bug in data source.")
+        next = int(tag) + 1
+
+    print("last tag of batch:   %s" % (tag))
 

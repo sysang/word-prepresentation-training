@@ -6,7 +6,6 @@ import os
 import multiprocessing
 import math
 import collections
-from multiprocessing import Process, Manager
 
 from gensim.utils import simple_preprocess
 from gensim.utils import to_unicode
@@ -20,69 +19,22 @@ import smart_open
 from pymongo import MongoClient
 import pymongo
 
-import pika
-import uuid
-
 import logging
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
+
+
+SentimentDocument = collections.namedtuple('SentimentDocument', 'words tags')
 
 DB_HOST = '172.17.0.1'
 DB_PORT = 27017
 DB_USER = 'bottrainer'
 DB_UPASS = '111'
 
-RABBITMQ_HOST = 'localhost'
-
-BUFFER_SIZE = 4
-
-SentimentDocument = collections.namedtuple('SentimentDocument', 'words tags')
-
-# credentials = pika.PlainCredentials('myrabbit', '111')
-
-
-class CorpusRpcClient(object):
-
-    def __init__(self, host, credentials=None):
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=host, heartbeat=0))
-
-        self.channel = self.connection.channel()
-
-        result = self.channel.queue_declare(queue='', exclusive=True)
-        self.callback_queue = result.method.queue
-
-        self.channel.basic_consume(
-            queue=self.callback_queue,
-            on_message_callback=self.on_response,
-            auto_ack=True)
-
-    def on_response(self, ch, method, props, body):
-        if self.corr_id == props.correlation_id:
-            self.response = body
-
-    def call(self):
-        self.response = None
-        self.corr_id = str(uuid.uuid4())
-        self.channel.basic_publish(
-            exchange='',
-            routing_key='rpc_queue',
-            properties=pika.BasicProperties(
-                reply_to=self.callback_queue,
-                correlation_id=self.corr_id,
-            ),
-            body='')
-        while self.response is None:
-            self.connection.process_data_events()
-        return self.response
-
 
 class MyCorpus(object):
-    def __init__(self, name, deque_buffer01, deque_buffer02, deque_buffer03, deque_buffer04):
+    def __init__(self, name):
         self.dataset = name
         self.total_count = self.count()
-        self.deque_buffer01 = deque_buffer01
-        self.deque_buffer02 = deque_buffer02
-        self.deque_buffer03 = deque_buffer03
-        self.deque_buffer04 = deque_buffer04
 
     def _opt_collection(self, client):
         if self.dataset == 'imdb':
@@ -105,71 +57,21 @@ class MyCorpus(object):
             db = client.thefinal
             return db.docs
 
-        raise Exception("No valid database")
-
-    def create_document_tag(self, response):
-        response = response.decode('utf-8')
-        splited = response.split('>|<')
-
-        for doc in splited:
-            if doc == '<!END!>':
-                tag = -1
-                text = doc
-            else:
-                tag, text = doc.split(']~[', 1)
-
-            yield SentimentDocument(text.split(' '), [int(tag)])
-
     def __iter__(self):
-        try:
-            while True:
-                # print('~~~~~~~~~~~~~~~~~~~~~ I AM HAVING NOT TASK! ~~~~~~~~~~~~~~~~~~~~~~')
-                if len(self.deque_buffer01) == BUFFER_SIZE:
-                    # print("---------  DEBUG ---------  BUFFER01 reading...")
-                    while len(self.deque_buffer01) > 0:
-                        response = self.deque_buffer01.pop()
-                        tag_documents = self.create_document_tag(response)
-                        for doc in tag_documents:
-                            if doc.words[0] == '<!END!>':
-                                raise StopIteration
-                            yield doc
-                    # self.deque_buffer01.task_done()
-                    # print("_ _ _ _ _  DEBUG _ _ _ _ _  BUFFER01 exhausted!!")
+        with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
+            dbcollection = self._opt_collection(client)
 
-                if len(self.deque_buffer02) == BUFFER_SIZE:
-                    # print("---------  DEBUG ---------  BUFFER02 reading...")
-                    while len(self.deque_buffer02) > 0:
-                        response = self.deque_buffer02.pop()
-                        tag_documents = self.create_document_tag(response)
-                        for doc in tag_documents:
-                            if doc.words[0] == '<!END!>':
-                                raise StopIteration
-                            yield doc
-                    # print("_ _ _ _ _  DEBUG _ _ _ _ _  BUFFER02 exhausted!!")
+            total = self.total_count
+            batch_size = 50000
+            start_index = 0
+            for index in range(0, math.ceil(total / batch_size)):
+                start_index = index * batch_size
+                end_index = start_index + batch_size if (start_index + batch_size) < total else total
+                cursor = dbcollection.find(projection={"_id": False})
+                reviews_batch = list(cursor[start_index:end_index])
 
-                if len(self.deque_buffer03) == BUFFER_SIZE:
-                    # print("---------  DEBUG ---------  BUFFER03 reading...")
-                    while len(self.deque_buffer03) > 0:
-                        response = self.deque_buffer03.pop()
-                        tag_documents = self.create_document_tag(response)
-                        for doc in tag_documents:
-                            if doc.words[0] == '<!END!>':
-                                raise StopIteration
-                            yield doc
-                    # print("_ _ _ _ _  DEBUG _ _ _ _ _  BUFFER03 exhausted!!")
-
-                if len(self.deque_buffer04) == BUFFER_SIZE:
-                    # print("---------  DEBUG ---------  BUFFER04 reading...")
-                    while len(self.deque_buffer04) > 0:
-                        response = self.deque_buffer04.pop()
-                        tag_documents = self.create_document_tag(response)
-                        for doc in tag_documents:
-                            if doc.words[0] == '<!END!>':
-                                raise StopIteration
-                            yield doc
-                    # print("_ _ _ _ _  DEBUG _ _ _ _ _  BUFFER04 exhausted!!")
-        except Exception as e:
-            pass
+                for line in reviews_batch:
+                    yield SentimentDocument(line['text'].split(' '), [int(line['tag'])])
 
     def get_doc_by_index(self, index):
         with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
@@ -199,78 +101,26 @@ def pick_random_word(model, threshold=1000):
             return word
 
 
-def get_data(rpc_client):
-    while True:
-        response = rpc_client.call()
-        if not response:
-            raise StopIteration
-
-        yield response
-
-
-def thread_data_buffer(rpc_client, deque_buffer01, deque_buffer02, deque_buffer03, deque_buffer04):
-    iterable_data = get_data(rpc_client)
-
-    while True:
-        # print('~~~~~~~~~~~~~~~~~~~~~ I AM DOING NOTHING! ~~~~~~~~~~~~~~~~~~~~~~')
-        if len(deque_buffer01) == 0:
-            # print("+ + + + +  DEBUG + + + + +  BUFFER01 stacking...")
-            while len(deque_buffer01) < BUFFER_SIZE:
-                deque_buffer01.append(next(iterable_data))
-            # print(">>>>>>>>>  DEBUG >>>>>>>>>  BUFFER01 full!!")
-
-        if len(deque_buffer02) == 0:
-            # print("+ + + + +  DEBUG + + + + +  BUFFER02 stacking...")
-            while len(deque_buffer02) < BUFFER_SIZE:
-                deque_buffer02.append(next(iterable_data))
-            # print(">>>>>>>>>  DEBUG >>>>>>>>>  BUFFER02 full!!")
-
-        if len(deque_buffer03) == 0:
-            # print("+++++++++  DEBUG +++++++++  BUFFER03 stacking...")
-            while len(deque_buffer03) < BUFFER_SIZE:
-                deque_buffer03.append(next(iterable_data))
-            # print(">>>>>>>>>  DEBUG >>>>>>>>>  BUFFER03 full!!")
-
-        if len(deque_buffer04) == 0:
-            # print("+++++++++  DEBUG +++++++++  BUFFER04 stacking...")
-            while len(deque_buffer04) < BUFFER_SIZE:
-                deque_buffer04.append(next(iterable_data))
-            # print(">>>>>>>>>  DEBUG >>>>>>>>>  BUFFER04 full!!")
-
-
 def train(name, common_kwargs, saved_fname, evaluate=False):
-
-    rpc_client = CorpusRpcClient(RABBITMQ_HOST)
-
-    deque_buffer01 = Manager().list()
-    deque_buffer02 = Manager().list()
-    deque_buffer03 = Manager().list()
-    deque_buffer04 = Manager().list()
-
-    multi_process = Process(target=thread_data_buffer, args=(rpc_client, deque_buffer01, deque_buffer02, deque_buffer03, deque_buffer04))
-    multi_process.start()
-
-    mycorpus = MyCorpus(name, deque_buffer01, deque_buffer02, deque_buffer03, deque_buffer04)
+    alldocs = MyCorpus(name)
 
     simple_models = [
         # PV-DM w/ concatenation - big, slow, experimental mode
         # window=5 (both sides) approximates paper's apparent 10-word total window size
-        Doc2Vec(workers=5, queue_factor=16, **common_kwargs),
+        Doc2Vec(workers=5, **common_kwargs),
     ]
 
     if not evaluate:
         for model in simple_models:
-            model.build_vocab(mycorpus)
+            model.build_vocab(alldocs)
             print("%s vocabulary scanned & state initialized" % model)
-            model.train(mycorpus, total_examples=mycorpus.total_count, epochs=model.epochs)
+            model.train(alldocs, total_examples=alldocs.total_count, epochs=model.epochs)
     else:
         simple_models = [
             # PV-DM w/ concatenation - big, slow, experimental mode
             # window=5 (both sides) approximates paper's apparent 10-word total window size
             Doc2Vec.load(saved_fname),
         ]
-
-    multi_process.join()
 
     # EXAMINING RESULTS
     #
@@ -308,23 +158,13 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     print("Are inferred vectors close to the precalculated ones?")
     print("-----------------------------------------------------")
 
-    topn = 100
     for ind in range(0, 7):
-        random_index, random_doc = mycorpus.get_random_doc()
-        print('[+] index %s -> "%s"' % (random_index, random_doc))
+        random_index, random_doc = alldocs.get_random_doc()
+        print('[+] ... "%s"' % (random_doc))
         for model in simple_models:
             inferred_docvec = model.infer_vector(random_doc.split(' '))
-            similarities = model.docvecs.most_similar([inferred_docvec], topn=topn)
-            rank = 1
-            for (index, score) in similarities:
-                if index == random_index:
-                    print('** Matched with rank %s, score: %s' % (rank, score))
-                    print("\n")
-                    break
-                rank += 1
-            if rank == topn + 1:
-                print("!! No any match in top %s similarities" % (topn))
-                print("\n")
+            print('%s' % (model.docvecs.most_similar([inferred_docvec], topn=10)))
+            print("\n")
 
     # Do close documents seem more related than distant ones?
     # -------------------------------------------------------
@@ -336,12 +176,12 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     doc_id = np.random.randint(simple_models[0].docvecs.count)  # pick random doc, re-run cell for more examples
     model = simple_models[0]
     sims = model.docvecs.most_similar(doc_id, topn=model.docvecs.count)  # get *all* similar documents
-    print(u'TARGET (%d): %s\n' % (doc_id, mycorpus.get_doc_by_index(doc_id)))
+    print(u'TARGET (%d): %s\n' % (doc_id, alldocs.get_doc_by_index(doc_id)))
     print(u'SIMILAR/DISSIMILAR DOCS PER MODEL %s:\n' % (str(model)))
     for label, index in [('MOST', 0), ('MEDIAN', len(sims)//2), ('LEAST', len(sims) - 1)]:
         s = sims[index]
         i = int(sims[index][0])
-        words = mycorpus.get_doc_by_index(i)
+        words = alldocs.get_doc_by_index(i)
         print(u'%s %s: «%s»\n' % (label, s, words))
 
     # Do the word vectors show useful similarities?
@@ -354,10 +194,9 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     for ind in range(0, 5):
         target_word = pick_random_word(simple_models[0])
         for model in simple_models:
-            print('[+] target_word: %r model: %s:' % (target_word, model))
+            print('target_word: %r model: %s similar words:' % (target_word, model))
             for i, (word, sim) in enumerate(model.wv.most_similar(target_word, topn=7), 1):
                 print('     %d. %.2f %r' % (i, sim, word))
-            print("\n")
 
     # Are the word vectors from this dataset any good at analogies?
     # -------------------------------------------------------------

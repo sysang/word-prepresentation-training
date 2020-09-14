@@ -6,6 +6,7 @@ from collections import deque
 
 from pymongo import MongoClient
 
+import _thread
 import pika
 
 parser = argparse.ArgumentParser(description='Rabbitmq RPC corpus channel')
@@ -26,7 +27,8 @@ DB_UPASS = '111'
 
 qsize = 25000
 batch_size = 100000
-d = deque(maxlen=2)
+buffer_number = 50
+d = deque(maxlen=buffer_number)
 
 
 def opt_collection(client):
@@ -65,30 +67,40 @@ def data_buf():
                 volume = 0
                 result = ''
                 for line in reviews_batch:
-                    doc = str(line['tag']) + '[!]' + line['text']
-                    result += ']![' + doc
+                    doc = str(line['tag']) + ']~[' + line['text']
+                    result += '>|<' + doc
                     volume += 1
                     count += 1
-                    if volume >= qsize or volume >= loaded:
+                    if volume >= qsize or (count + volume) > total:
                         yield result[3:]
                         volume = 0
                         result = ''
 
             yield '<!END!>'
+            print('DEBUG: last batch volume %d' % (loaded))
+            print('DEBUG: last  volume %d' % (volume))
             print('DEBUG: %d documents have been served.' % (count))
 
 
 def stack(__buffer):
-    result = next(__buffer)
-    d.appendleft(result)
-    print('Stacked item of length %d, current length %d' % (len(result), len(d)))
+    while True:
+        if len(d) < math.floor(buffer_number / 1.1):
+            while len(d) < buffer_number:
+                result = next(__buffer)
+                d.appendleft(result)
+                print('Stacked item of length %d, current length %d' % (len(result), len(d)))
+                pass
+        pass
 
 
 def get_data():
-    result = d.pop()
-    print('Pop, current length %d' % (len(d)))
+    while True:
+        if len(d):
+            result = d.pop()
+            print('Pop, current length %d' % (len(d)))
 
-    return result
+            return result
+        pass
 
 
 def on_request(ch, method, props, body, buffer):
@@ -100,7 +112,6 @@ def on_request(ch, method, props, body, buffer):
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
     print('Start stacking data...')
-    stack(buffer)
 
 
 def on_request_wrapper(buffer):
@@ -110,8 +121,9 @@ def on_request_wrapper(buffer):
 
 
 buffer = data_buf()
-for i in range(2):
-    stack(buffer)
+_thread.start_new_thread(stack, (buffer,))
+# for i in range(buffer_number):
+#     stack(buffer)
 
 
 channel.basic_qos(prefetch_count=1)
