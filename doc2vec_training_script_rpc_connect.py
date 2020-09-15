@@ -6,6 +6,7 @@ import os
 import multiprocessing
 import math
 import collections
+import time
 from multiprocessing import Process, Manager
 
 from gensim.utils import simple_preprocess
@@ -33,7 +34,11 @@ DB_UPASS = '111'
 
 RABBITMQ_HOST = 'localhost'
 
+# set the item in 1 buffer, too big value will slow down the loop
+# this will multiple buffering cache to (n)times of RPC server package size
 BUFFER_SIZE = 4
+
+BUFFER_NUMBER = 15
 
 SentimentDocument = collections.namedtuple('SentimentDocument', 'words tags')
 
@@ -70,19 +75,19 @@ class CorpusRpcClient(object):
                 correlation_id=self.corr_id,
             ),
             body='')
+
         while self.response is None:
             self.connection.process_data_events()
+
         return self.response
 
 
 class MyCorpus(object):
-    def __init__(self, name, deque_buffer01, deque_buffer02, deque_buffer03, deque_buffer04):
+    def __init__(self, name, multithread_buffers):
         self.dataset = name
         self.total_count = self.count()
-        self.deque_buffer01 = deque_buffer01
-        self.deque_buffer02 = deque_buffer02
-        self.deque_buffer03 = deque_buffer03
-        self.deque_buffer04 = deque_buffer04
+        self.multithread_buffers = multithread_buffers
+        self.buffer_number = len(multithread_buffers)
 
     def _opt_collection(self, client):
         if self.dataset == 'imdb':
@@ -109,66 +114,34 @@ class MyCorpus(object):
 
     def create_document_tag(self, response):
         response = response.decode('utf-8')
+        if response == ('<!END!>'*100):
+            raise StopIteration
+
         splited = response.split('>|<')
-
         for doc in splited:
-            if doc == '<!END!>':
-                tag = -1
-                text = doc
-            else:
-                tag, text = doc.split(']~[', 1)
-
+            tag, text = doc.split(']~[', 1)
             yield SentimentDocument(text.split(' '), [int(tag)])
 
     def __iter__(self):
         try:
             while True:
-                # print('~~~~~~~~~~~~~~~~~~~~~ I AM HAVING NOT TASK! ~~~~~~~~~~~~~~~~~~~~~~')
-                if len(self.deque_buffer01) == BUFFER_SIZE:
-                    # print("---------  DEBUG ---------  BUFFER01 reading...")
-                    while len(self.deque_buffer01) > 0:
-                        response = self.deque_buffer01.pop()
-                        tag_documents = self.create_document_tag(response)
-                        for doc in tag_documents:
-                            if doc.words[0] == '<!END!>':
-                                raise StopIteration
-                            yield doc
-                    # self.deque_buffer01.task_done()
-                    # print("_ _ _ _ _  DEBUG _ _ _ _ _  BUFFER01 exhausted!!")
+                nextind = self.buffer_number + 1
+                for i in range(self.buffer_number):
+                    nextind = i if len(self.multithread_buffers[i]) == BUFFER_SIZE and i < nextind else nextind
 
-                if len(self.deque_buffer02) == BUFFER_SIZE:
-                    # print("---------  DEBUG ---------  BUFFER02 reading...")
-                    while len(self.deque_buffer02) > 0:
-                        response = self.deque_buffer02.pop()
-                        tag_documents = self.create_document_tag(response)
-                        for doc in tag_documents:
-                            if doc.words[0] == '<!END!>':
-                                raise StopIteration
-                            yield doc
-                    # print("_ _ _ _ _  DEBUG _ _ _ _ _  BUFFER02 exhausted!!")
+                if nextind == self.buffer_number + 1:
+                    time.sleep(0.001)
+                    continue
 
-                if len(self.deque_buffer03) == BUFFER_SIZE:
-                    # print("---------  DEBUG ---------  BUFFER03 reading...")
-                    while len(self.deque_buffer03) > 0:
-                        response = self.deque_buffer03.pop()
-                        tag_documents = self.create_document_tag(response)
-                        for doc in tag_documents:
-                            if doc.words[0] == '<!END!>':
-                                raise StopIteration
-                            yield doc
-                    # print("_ _ _ _ _  DEBUG _ _ _ _ _  BUFFER03 exhausted!!")
+                buffer = self.multithread_buffers[nextind]
 
-                if len(self.deque_buffer04) == BUFFER_SIZE:
-                    # print("---------  DEBUG ---------  BUFFER04 reading...")
-                    while len(self.deque_buffer04) > 0:
-                        response = self.deque_buffer04.pop()
-                        tag_documents = self.create_document_tag(response)
-                        for doc in tag_documents:
-                            if doc.words[0] == '<!END!>':
-                                raise StopIteration
-                            yield doc
-                    # print("_ _ _ _ _  DEBUG _ _ _ _ _  BUFFER04 exhausted!!")
-        except Exception as e:
+                while len(buffer) > 0:
+                    response = buffer.pop()
+                    tag_documents = self.create_document_tag(response)
+                    for doc in tag_documents:
+                        yield doc
+
+        except Exception:
             pass
 
     def get_doc_by_index(self, index):
@@ -203,54 +176,42 @@ def get_data(rpc_client):
     while True:
         response = rpc_client.call()
         if not response:
-            raise StopIteration
+            raise StopIteration("Can not get data from rpc server.")
 
         yield response
 
 
-def thread_data_buffer(rpc_client, deque_buffer01, deque_buffer02, deque_buffer03, deque_buffer04):
+def thread_data_buffer(rpc_client, multithread_buffers):
     iterable_data = get_data(rpc_client)
+    buffer_number = len(multithread_buffers)
 
     while True:
         # print('~~~~~~~~~~~~~~~~~~~~~ I AM DOING NOTHING! ~~~~~~~~~~~~~~~~~~~~~~')
-        if len(deque_buffer01) == 0:
-            # print("+ + + + +  DEBUG + + + + +  BUFFER01 stacking...")
-            while len(deque_buffer01) < BUFFER_SIZE:
-                deque_buffer01.append(next(iterable_data))
-            # print(">>>>>>>>>  DEBUG >>>>>>>>>  BUFFER01 full!!")
+        nextind = buffer_number + 1
+        for i in range(buffer_number):
+            nextind = i if len(multithread_buffers[i]) == 0 and i < nextind else nextind
 
-        if len(deque_buffer02) == 0:
-            # print("+ + + + +  DEBUG + + + + +  BUFFER02 stacking...")
-            while len(deque_buffer02) < BUFFER_SIZE:
-                deque_buffer02.append(next(iterable_data))
-            # print(">>>>>>>>>  DEBUG >>>>>>>>>  BUFFER02 full!!")
+        if nextind == buffer_number + 1:
+            time.sleep(0.01)
+            continue
 
-        if len(deque_buffer03) == 0:
-            # print("+++++++++  DEBUG +++++++++  BUFFER03 stacking...")
-            while len(deque_buffer03) < BUFFER_SIZE:
-                deque_buffer03.append(next(iterable_data))
-            # print(">>>>>>>>>  DEBUG >>>>>>>>>  BUFFER03 full!!")
-
-        if len(deque_buffer04) == 0:
-            # print("+++++++++  DEBUG +++++++++  BUFFER04 stacking...")
-            while len(deque_buffer04) < BUFFER_SIZE:
-                deque_buffer04.append(next(iterable_data))
-            # print(">>>>>>>>>  DEBUG >>>>>>>>>  BUFFER04 full!!")
+        buffer = multithread_buffers[nextind]
+        while len(buffer) < BUFFER_SIZE:
+            buffer.append(next(iterable_data))
 
 
 def train(name, common_kwargs, saved_fname, evaluate=False):
 
     rpc_client = CorpusRpcClient(RABBITMQ_HOST)
 
-    deque_buffer01 = Manager().list()
-    deque_buffer02 = Manager().list()
-    deque_buffer03 = Manager().list()
-    deque_buffer04 = Manager().list()
+    multithread_buffers = []
+    for i in range(BUFFER_NUMBER):
+        multithread_buffers.append(Manager().list())
 
-    multi_process = Process(target=thread_data_buffer, args=(rpc_client, deque_buffer01, deque_buffer02, deque_buffer03, deque_buffer04))
+    multi_process = Process(target=thread_data_buffer, args=(rpc_client, multithread_buffers))
     multi_process.start()
 
-    mycorpus = MyCorpus(name, deque_buffer01, deque_buffer02, deque_buffer03, deque_buffer04)
+    mycorpus = MyCorpus(name, multithread_buffers)
 
     simple_models = [
         # PV-DM w/ concatenation - big, slow, experimental mode

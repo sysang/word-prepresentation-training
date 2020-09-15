@@ -48,28 +48,26 @@ while True:
     response = fibonacci_rpc.call()
 
     if not response:
-        print("Client should stop iteration")
-        break
+        raise StopIteration("Response is empty")
 
-    response = response.decode('utf-8')
-    splited = response.split(']![')
+    try:
+        response = response.decode('utf-8')
+        splited = response.split('>|<')
 
-    next, _ = splited[0].split('[!]', 1)
-    next = int(next)
-    print("first tag of batch:  %d" % (next))
+        next, _ = splited[0].split(']~[', 1)
+        next = int(next)
+        print("first tag of batch:  %d" % (next))
 
-    for s in splited:
+        for s in splited:
+            tag, _ = s.split(']~[', 1)
+            if int(tag) != next:
+                print("tag - %s vs next - %s" % (tag, next))
+                raise Exception("There is bug in data source.")
+            next = int(tag) + 1
 
-        try:
-            tag, _ = s.split('[!]', 1)
-        except Exception as e:
-            print(s)
-            raise e
+        print("last tag of batch:   %s" % (tag))
 
-        if int(tag) != next:
-            print("tag - %s vs next - %s" % (tag, next))
-            raise Exception("There is bug in data source.")
-        next = int(tag) + 1
-
-    print("last tag of batch:   %s" % (tag))
+    except Exception as e:
+        print("RESPONSE: " + response)
+        raise e
 

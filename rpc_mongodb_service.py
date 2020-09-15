@@ -25,10 +25,9 @@ DB_PORT = 27017
 DB_USER = 'bottrainer'
 DB_UPASS = '111'
 
-qsize = 25000
-batch_size = 100000
+qsize = 100000  # too hight will make client side crashes
+batch_size = 100000  # must be appropriated with the 'batch_index' key in db
 buffer_number = 50
-d = deque(maxlen=buffer_number)
 
 
 def opt_collection(client):
@@ -48,8 +47,8 @@ def count_documents(dbcollection):
 
 
 def data_buf():
-    while True:
-        with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
+    with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
+        while True:
             dbcollection = client.thefinal.docs
 
             total = count_documents(dbcollection)
@@ -76,35 +75,38 @@ def data_buf():
                         volume = 0
                         result = ''
 
-            yield '<!END!>'
-            print('DEBUG: last batch volume %d' % (loaded))
-            print('DEBUG: last  volume %d' % (volume))
-            print('DEBUG: %d documents have been served.' % (count))
+            print('<END>: last batch volume %d' % (loaded))
+            print('<END>: last  volume %d' % (volume))
+            print('<END>: %d documents have been served.' % (count))
+
+            yield ('<!END!>'*100)
 
 
-def stack(__buffer):
+def stack_data(__buffer, d):
     while True:
         if len(d) < math.floor(buffer_number / 1.1):
             while len(d) < buffer_number:
                 result = next(__buffer)
                 d.appendleft(result)
-                print('Stacked item of length %d, current length %d' % (len(result), len(d)))
-                pass
-        pass
+                print('Stacked item, cache buffer length %d' % (len(d)))
+
+        time.sleep(0.01)
 
 
-def get_data():
+def get_data(d):
     while True:
         if len(d):
             result = d.pop()
-            print('Pop, current length %d' % (len(d)))
+            print('Pop, cache buffer length %d' % (len(d)))
 
             return result
         pass
 
+        time.sleep(0.01)
 
-def on_request(ch, method, props, body, buffer):
-    response = get_data()
+
+def on_request(ch, method, props, body, d):
+    response = get_data(d)
 
     ch.basic_publish(exchange='', routing_key=props.reply_to,
                      properties=pika.BasicProperties(correlation_id=props.correlation_id),
@@ -114,21 +116,24 @@ def on_request(ch, method, props, body, buffer):
     print('Start stacking data...')
 
 
-def on_request_wrapper(buffer):
+def on_request_wrapper(d):
     def callback(ch, method, props, body):
-        on_request(ch, method, props, body, buffer)
+        on_request(ch, method, props, body, d)
     return callback
 
 
-buffer = data_buf()
-_thread.start_new_thread(stack, (buffer,))
-# for i in range(buffer_number):
-#     stack(buffer)
+def main():
+    d = deque(maxlen=buffer_number)
+    buffer = data_buf()
+    _thread.start_new_thread(stack_data, (buffer, d))
+
+    channel.basic_qos(prefetch_count=1)
+    channel.basic_consume(queue='rpc_queue', on_message_callback=on_request_wrapper(d))
+
+    print(" [x] Awaiting RPC requests")
+    channel.start_consuming()
 
 
-channel.basic_qos(prefetch_count=1)
-channel.basic_consume(queue='rpc_queue', on_message_callback=on_request_wrapper(buffer))
-
-print(" [x] Awaiting RPC requests")
-channel.start_consuming()
+if __name__ == "__main__":
+    main()
 
