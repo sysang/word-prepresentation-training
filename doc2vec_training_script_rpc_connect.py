@@ -7,7 +7,7 @@ import multiprocessing
 import math
 import collections
 import time
-from multiprocessing import Process, Manager
+from multiprocessing import Process, Pipe, Manager
 
 from gensim.utils import simple_preprocess
 from gensim.utils import to_unicode
@@ -33,10 +33,6 @@ DB_USER = 'bottrainer'
 DB_UPASS = '111'
 
 RABBITMQ_HOST = 'localhost'
-
-# set the item in 1 buffer, too big value will slow down the loop
-# this will multiple buffering cache to (n)times of RPC server package size
-BUFFER_SIZE = 10
 
 BUFFER_NUMBER = 3
 
@@ -128,15 +124,16 @@ class MyCorpus(object):
             while True:
                 nextind = index % self.buffer_number
 
-                if len(self.multithread_buffers[nextind]) < BUFFER_SIZE:
+                if not self.multithread_buffers[nextind]['full']:
                     time.sleep(0.1)
                     continue
 
-                time.sleep(0.01)
-                buffer = self.multithread_buffers[nextind]
-                while len(buffer) > 0:
-                    response = buffer.pop()
-                    tag_documents = self.create_document_tag(response)
+                # print('<READING:> %d' % (nextind))
+                response = self.multithread_buffers[nextind]['receiver'].recv()
+                self.multithread_buffers[nextind]['full'] = False
+
+                for message in response:
+                    tag_documents = self.create_document_tag(message)
                     for doc in tag_documents:
                         yield doc
 
@@ -191,24 +188,50 @@ def thread_data_buffer(rpc_client, multithread_buffers):
         # print('~~~~~~~~~~~~~~~~~~~~~ I AM DOING NOTHING! ~~~~~~~~~~~~~~~~~~~~~~')
         nextind = index % buffer_number
 
-        if len(multithread_buffers[nextind]) > 0:
+        if multithread_buffers[nextind]['full']:
             time.sleep(0.1)
             continue
 
-        buffer = multithread_buffers[nextind]
-        while len(buffer) < BUFFER_SIZE:
-            buffer.append(next(iterable_data))
-
+        messages = []
+        for i in range(3):
+            messages.append(next(iterable_data))
+        multithread_buffers[nextind]['full'] = True
+        multithread_buffers[nextind]['sender'].send(messages)
         index += 1
+
+        # print('<SENT:> %d' % (nextind))
+
+
+def sanity_check_datasource(mycorpus):
+    try:
+        next = 0
+        tag = 0
+        for doc in mycorpus:
+            tag = doc.tags[0]
+            if tag != next:
+                print("tag - %s vs next - %s" % (tag, next))
+                raise Exception("There is a break in data source.")
+            next = tag + 1
+
+        print("Done, last tag of batch:   %s" % (tag))
+
+        exit(0)
+
+    except Exception as e:
+        print("[DOCUMENT]:")
+        print(doc)
+        raise e
 
 
 def train(name, common_kwargs, saved_fname, evaluate=False):
-
+    manager = Manager()
     rpc_client = CorpusRpcClient(RABBITMQ_HOST)
 
-    multithread_buffers = []
+    multithread_buffers = manager.list()
     for i in range(BUFFER_NUMBER):
-        multithread_buffers.append(Manager().list())
+        receiver, sender = Pipe(False)
+        buffer = manager.dict({'sender': sender, 'receiver': receiver, 'full': False})
+        multithread_buffers.append(buffer)
 
     multi_process = Process(target=thread_data_buffer, args=(rpc_client, multithread_buffers))
     multi_process.start()

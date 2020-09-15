@@ -26,7 +26,7 @@ DB_USER = 'bottrainer'
 DB_UPASS = '111'
 
 batch_size = 100000  # must be appropriated with the 'batch_index' key in db
-buffer_number = 50
+buffer_number = 20
 
 
 def opt_collection(client):
@@ -100,8 +100,6 @@ def on_request(ch, method, props, body, d):
                      properties=pika.BasicProperties(correlation_id=props.correlation_id),
                      body=str(response))
     ch.basic_ack(delivery_tag=method.delivery_tag)
-
-    print('Start stacking data...')
 
 
 def on_request_wrapper(d):
