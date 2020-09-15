@@ -26,7 +26,7 @@ DB_USER = 'bottrainer'
 DB_UPASS = '111'
 
 batch_size = 100000  # must be appropriated with the 'batch_index' key in db
-buffer_number = 50
+buffer_number = 45
 
 
 def opt_collection(client):
@@ -38,6 +38,10 @@ def opt_collection(client):
         db = client.thefinal
         return db.docs
 
+    if database == 'enwik9':
+        db = client.enwik9
+        return db.docs
+
     raise Exception("Invalid mongodb database name")
 
 
@@ -47,7 +51,7 @@ def count_documents(dbcollection):
 
 def data_buf():
     with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
-        dbcollection = client.thefinal.docs
+        dbcollection = opt_collection(client)
         total = count_documents(dbcollection)
 
         while True:

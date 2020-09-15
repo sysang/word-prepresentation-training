@@ -1,25 +1,13 @@
 # coding: utf-8
-import io
-import re
-import tarfile
 import os
-import multiprocessing
-import math
 import collections
-import time
-from multiprocessing import Process, Pipe, Manager
+from multiprocessing import Process, Pipe
 
-from gensim.utils import simple_preprocess
-from gensim.utils import to_unicode
 from gensim.models.doc2vec import Doc2Vec
-import gensim.utils
-import gensim.models.doc2vec
 import numpy as np
 
-from collections import OrderedDict
 import smart_open
 from pymongo import MongoClient
-import pymongo
 
 import pika
 import uuid
@@ -34,8 +22,7 @@ DB_UPASS = '111'
 
 RABBITMQ_HOST = 'localhost'
 
-BUFFER_NUMBER = 2
-PACKAGE_NUMBER = 5
+MESSAGE_NUMBER = 15
 
 SentimentDocument = collections.namedtuple('SentimentDocument', 'words tags')
 
@@ -80,11 +67,10 @@ class CorpusRpcClient(object):
 
 
 class MyCorpus(object):
-    def __init__(self, name, multithread_buffers):
+    def __init__(self, name, receiver):
         self.dataset = name
-        self.total_count = self.count()
-        self.multithread_buffers = multithread_buffers
-        self.buffer_number = len(multithread_buffers)
+        self.onhold_messsages = []
+        self.receiver = receiver
 
     def _opt_collection(self, client):
         if self.dataset == 'imdb':
@@ -109,39 +95,24 @@ class MyCorpus(object):
 
         raise Exception("No valid database")
 
-    def create_document_tag(self, response):
-        response = response.decode('utf-8')
-        if response == ('<!END!>'):
-            raise StopIteration
-
-        splited = response.split('>|<')
+    def create_document_tag(self, message):
+        splited = message.split('>|<')
         for doc in splited:
             tag, text = doc.split(']~[', 1)
             yield SentimentDocument(text.split(' '), [int(tag)])
 
     def __iter__(self):
-        try:
-            index = 0
-            while True:
-                nextind = index % self.buffer_number
+        while True:
+            # print('~~~~~~~~~~~~~~~~~~~~~ I AM HAVING NO JOB! ~~~~~~~~~~~~~~~~~~~~~~')
+            # print('<RECEIVED>')
+            message = self.receiver.recv_bytes()
+            message = message.decode('utf-8')
+            if message == ('<!END!>'):
+                break
 
-                if not self.multithread_buffers[nextind]['full']:
-                    time.sleep(0.001)
-                    continue
-
-                # print('<READING:> %d' % (nextind))
-                response = self.multithread_buffers[nextind]['receiver'].recv()
-                self.multithread_buffers[nextind]['full'] = False
-
-                for message in response:
-                    tag_documents = self.create_document_tag(message)
-                    for doc in tag_documents:
-                        yield doc
-
-                index += 1
-
-        except Exception:
-            pass
+            tag_documents = self.create_document_tag(message)
+            for doc in tag_documents:
+                yield doc
 
     def get_doc_by_index(self, index):
         with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
@@ -180,31 +151,22 @@ def get_data(rpc_client):
         yield response
 
 
-def thread_data_buffer(rpc_client, multithread_buffers):
+def thread_data_buffer(rpc_client, sender):
     iterable_data = get_data(rpc_client)
-    buffer_number = len(multithread_buffers)
-    index = 0
 
     while True:
         # print('~~~~~~~~~~~~~~~~~~~~~ I AM DOING NOTHING! ~~~~~~~~~~~~~~~~~~~~~~')
-        nextind = index % buffer_number
-
-        if multithread_buffers[nextind]['full']:
-            time.sleep(0.001)
-            continue
-
         messages = []
-        for i in range(PACKAGE_NUMBER):
+        for i in range(MESSAGE_NUMBER):
             messages.append(next(iterable_data))
-        multithread_buffers[nextind]['full'] = True
-        multithread_buffers[nextind]['sender'].send(messages)
-        index += 1
 
-        # print('<SENT:> %d' % (nextind))
+        for message in messages:
+            # print('<SENT>')
+            sender.send_bytes(message)
 
 
 def sanity_check_datasource(mycorpus):
-    try:
+    while True:
         next = 0
         tag = 0
         for doc in mycorpus:
@@ -214,30 +176,20 @@ def sanity_check_datasource(mycorpus):
                 raise Exception("There is a break in data source.")
             next = tag + 1
 
-        print("Done, last tag of batch:   %s" % (tag))
-
-        exit(0)
-
-    except Exception as e:
-        print("[DOCUMENT]:")
-        print(doc)
-        raise e
+        print("** DONE *** Last tag: %s" % (tag))
+        print("\n")
 
 
 def train(name, common_kwargs, saved_fname, evaluate=False):
-    manager = Manager()
     rpc_client = CorpusRpcClient(RABBITMQ_HOST)
 
-    multithread_buffers = manager.list()
-    for i in range(BUFFER_NUMBER):
-        receiver, sender = Pipe(False)
-        buffer = manager.dict({'sender': sender, 'receiver': receiver, 'full': False})
-        multithread_buffers.append(buffer)
+    receiver, sender = Pipe(False)
 
-    multi_process = Process(target=thread_data_buffer, args=(rpc_client, multithread_buffers))
+    multi_process = Process(target=thread_data_buffer, args=(rpc_client, sender))
+    multi_process.daemon = True
     multi_process.start()
 
-    mycorpus = MyCorpus(name, multithread_buffers)
+    mycorpus = MyCorpus(name, receiver)
 
     # sanity_check_datasource(mycorpus)
 

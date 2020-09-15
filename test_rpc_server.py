@@ -69,5 +69,5 @@ while True:
 
     except Exception as e:
         print("RESPONSE: " + response)
-        raise e
+        # raise e
 
