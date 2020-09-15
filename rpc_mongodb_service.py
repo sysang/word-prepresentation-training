@@ -48,26 +48,21 @@ def count_documents(dbcollection):
 
 def data_buf():
     with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
+        dbcollection = client.thefinal.docs
+        total = count_documents(dbcollection)
+
         while True:
-            dbcollection = client.thefinal.docs
-
-            total = count_documents(dbcollection)
-
             count = 1
             for index in range(0, math.ceil(total / batch_size)):
                 print("Caching batch index: %d" % (index))
 
-                cursor = dbcollection.find({'batch_index': index}, projection={"_id": False})
-                reviews_batch = list(cursor)
-                loaded = len(reviews_batch)
-                if not loaded:
-                    raise StopIteration("Stop data buffering iteration because of empty response.")
+                docs = dbcollection.find({'batch_index': index}, projection={"_id": False}).batch_size(10000)
 
                 volume = 0
                 result = ''
-                for line in reviews_batch:
-                    doc = str(line['tag']) + ']~[' + line['text']
-                    result += '>|<' + doc
+                for sentense in list(docs):
+                    concatenated = str(sentense['tag']) + ']~[' + sentense['text']
+                    result += '>|<' + concatenated
                     volume += 1
                     count += 1
                     if volume >= qsize or (count + volume) > total:
@@ -75,7 +70,6 @@ def data_buf():
                         volume = 0
                         result = ''
 
-            print('<END>: last batch volume %d' % (loaded))
             print('<END>: last  volume %d' % (volume))
             print('<END>: %d documents have been served.' % (count))
 
