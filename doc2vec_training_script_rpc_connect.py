@@ -34,7 +34,8 @@ DB_UPASS = '111'
 
 RABBITMQ_HOST = 'localhost'
 
-BUFFER_NUMBER = 3
+BUFFER_NUMBER = 2
+PACKAGE_NUMBER = 4
 
 SentimentDocument = collections.namedtuple('SentimentDocument', 'words tags')
 
@@ -125,7 +126,7 @@ class MyCorpus(object):
                 nextind = index % self.buffer_number
 
                 if not self.multithread_buffers[nextind]['full']:
-                    time.sleep(0.1)
+                    time.sleep(0.001)
                     continue
 
                 # print('<READING:> %d' % (nextind))
@@ -189,11 +190,11 @@ def thread_data_buffer(rpc_client, multithread_buffers):
         nextind = index % buffer_number
 
         if multithread_buffers[nextind]['full']:
-            time.sleep(0.1)
+            time.sleep(0.001)
             continue
 
         messages = []
-        for i in range(3):
+        for i in range(PACKAGE_NUMBER):
             messages.append(next(iterable_data))
         multithread_buffers[nextind]['full'] = True
         multithread_buffers[nextind]['sender'].send(messages)
