@@ -36,9 +36,9 @@ RABBITMQ_HOST = 'localhost'
 
 # set the item in 1 buffer, too big value will slow down the loop
 # this will multiple buffering cache to (n)times of RPC server package size
-BUFFER_SIZE = 4
+BUFFER_SIZE = 10
 
-BUFFER_NUMBER = 15
+BUFFER_NUMBER = 3
 
 SentimentDocument = collections.namedtuple('SentimentDocument', 'words tags')
 
@@ -114,7 +114,7 @@ class MyCorpus(object):
 
     def create_document_tag(self, response):
         response = response.decode('utf-8')
-        if response == ('<!END!>'*100):
+        if response == ('<!END!>'):
             raise StopIteration
 
         splited = response.split('>|<')
@@ -124,22 +124,23 @@ class MyCorpus(object):
 
     def __iter__(self):
         try:
+            index = 0
             while True:
-                nextind = self.buffer_number + 1
-                for i in range(self.buffer_number):
-                    nextind = i if len(self.multithread_buffers[i]) == BUFFER_SIZE and i < nextind else nextind
+                nextind = index % self.buffer_number
 
-                if nextind == self.buffer_number + 1:
-                    time.sleep(0.001)
+                if len(self.multithread_buffers[nextind]) < BUFFER_SIZE:
+                    time.sleep(0.1)
                     continue
 
+                time.sleep(0.01)
                 buffer = self.multithread_buffers[nextind]
-
                 while len(buffer) > 0:
                     response = buffer.pop()
                     tag_documents = self.create_document_tag(response)
                     for doc in tag_documents:
                         yield doc
+
+                index += 1
 
         except Exception:
             pass
@@ -184,20 +185,21 @@ def get_data(rpc_client):
 def thread_data_buffer(rpc_client, multithread_buffers):
     iterable_data = get_data(rpc_client)
     buffer_number = len(multithread_buffers)
+    index = 0
 
     while True:
         # print('~~~~~~~~~~~~~~~~~~~~~ I AM DOING NOTHING! ~~~~~~~~~~~~~~~~~~~~~~')
-        nextind = buffer_number + 1
-        for i in range(buffer_number):
-            nextind = i if len(multithread_buffers[i]) == 0 and i < nextind else nextind
+        nextind = index % buffer_number
 
-        if nextind == buffer_number + 1:
-            time.sleep(0.01)
+        if len(multithread_buffers[nextind]) > 0:
+            time.sleep(0.1)
             continue
 
         buffer = multithread_buffers[nextind]
         while len(buffer) < BUFFER_SIZE:
             buffer.append(next(iterable_data))
+
+        index += 1
 
 
 def train(name, common_kwargs, saved_fname, evaluate=False):
@@ -216,7 +218,7 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     simple_models = [
         # PV-DM w/ concatenation - big, slow, experimental mode
         # window=5 (both sides) approximates paper's apparent 10-word total window size
-        Doc2Vec(workers=5, queue_factor=16, **common_kwargs),
+        Doc2Vec(workers=8, queue_factor=4, **common_kwargs),
     ]
 
     if not evaluate:

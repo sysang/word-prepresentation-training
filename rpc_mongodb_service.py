@@ -25,7 +25,6 @@ DB_PORT = 27017
 DB_USER = 'bottrainer'
 DB_UPASS = '111'
 
-qsize = 100000  # too hight will make client side crashes
 batch_size = 100000  # must be appropriated with the 'batch_index' key in db
 buffer_number = 50
 
@@ -56,24 +55,20 @@ def data_buf():
             for index in range(0, math.ceil(total / batch_size)):
                 print("Caching batch index: %d" % (index))
 
-                docs = dbcollection.find({'batch_index': index}, projection={"_id": False}).batch_size(10000)
+                docs = dbcollection.find({'batch_index': index}, projection={"_id": False}).batch_size(20000)
 
-                volume = 0
                 result = ''
                 for sentense in list(docs):
                     concatenated = str(sentense['tag']) + ']~[' + sentense['text']
                     result += '>|<' + concatenated
-                    volume += 1
                     count += 1
-                    if volume >= qsize or (count + volume) > total:
-                        yield result[3:]
-                        volume = 0
-                        result = ''
+                yield result[3:]
 
-            print('<END>: last  volume %d' % (volume))
+            print("\n")
             print('<END>: %d documents have been served.' % (count))
+            print("------------------------------------")
 
-            yield ('<!END!>'*100)
+            yield ('<!END!>')
 
 
 def stack_data(__buffer, d):
@@ -84,7 +79,7 @@ def stack_data(__buffer, d):
                 d.appendleft(result)
                 print('Stacked item, cache buffer length %d' % (len(d)))
 
-        time.sleep(0.01)
+        time.sleep(0.1)
 
 
 def get_data(d):
@@ -94,9 +89,8 @@ def get_data(d):
             print('Pop, cache buffer length %d' % (len(d)))
 
             return result
-        pass
 
-        time.sleep(0.01)
+        time.sleep(0.1)
 
 
 def on_request(ch, method, props, body, d):

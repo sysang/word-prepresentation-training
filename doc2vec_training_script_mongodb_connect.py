@@ -31,6 +31,8 @@ DB_PORT = 27017
 DB_USER = 'bottrainer'
 DB_UPASS = '111'
 
+# NOTE: At training time, word processing speed  150k/s
+
 
 class MyCorpus(object):
     """
@@ -40,7 +42,9 @@ class MyCorpus(object):
         self.dataset = name
         self.batch_size = 100000
         self.total_count = self.count()
-        self.buffers = []
+        self.text_buffers = []
+        self.tag_buffers = []
+        self.index_buffers = []
 
     def _opt_collection(self, client):
         if self.dataset == 'imdb':
@@ -64,11 +68,8 @@ class MyCorpus(object):
             return db.docs
 
     def __iter__(self):
-        for text_buffer, tag_buffer in self.buffers:
-            for i in range(len(text_buffer)):
-                text = text_buffer[i]
-                tag = tag_buffer[i]
-                yield SentimentDocument(text.split(' '), [tag])
+        for text, tag in zip(self.text_buffers, self.tag_buffers):
+            yield SentimentDocument(text.split(' '), [tag])
 
     def cache_data(self):
         with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
@@ -76,25 +77,12 @@ class MyCorpus(object):
 
             total = self.total_count
             batch_size = self.batch_size
-            # start_index = 0
-            text_buffer = []
-            tag_buffer = []
-            for index in range(0, math.floor(total / batch_size)):
+            for index in range(0, math.ceil(total / batch_size)):
                 print("Caching batch index: %d" % (index))
-                # start_index = index * batch_size
-                # end_index = start_index + batch_size if (start_index + batch_size) < total else total
-                cursor = dbcollection.find({'batch_index': index}, projection={"_id": False})
-                reviews_batch = list(cursor)
-                text_buffer = []
-                tag_buffer = []
-                for line in reviews_batch:
-                    text_buffer.append(line['text'])
-                    tag_buffer.append(int(line['tag']))
-                print('text_buffer length %d' % (len(text_buffer)))
-                print('tag_buffer length %d' % (len(tag_buffer)))
-
-                self.buffers.append((text_buffer, tag_buffer))
-                print('buffers length %d' % (len(self.buffers)))
+                docs = dbcollection.find({'batch_index': index}, projection={"_id": False}).batch_size(10000)
+                for sentence in docs:
+                    self.text_buffers.append(sentence['text'])
+                    self.tag_buffers.append(int(sentence['tag']))
 
     def get_doc_by_index(self, index):
         with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
