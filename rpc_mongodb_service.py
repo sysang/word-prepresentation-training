@@ -26,7 +26,7 @@ DB_USER = 'bottrainer'
 DB_UPASS = '111'
 
 batch_size = 100000  # must be appropriated with the 'batch_index' key in db
-buffer_number = 20
+buffer_number = 50
 
 
 def opt_collection(client):

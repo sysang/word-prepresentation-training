@@ -35,7 +35,7 @@ DB_UPASS = '111'
 RABBITMQ_HOST = 'localhost'
 
 BUFFER_NUMBER = 2
-PACKAGE_NUMBER = 4
+PACKAGE_NUMBER = 5
 
 SentimentDocument = collections.namedtuple('SentimentDocument', 'words tags')
 
@@ -238,6 +238,8 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     multi_process.start()
 
     mycorpus = MyCorpus(name, multithread_buffers)
+
+    # sanity_check_datasource(mycorpus)
 
     simple_models = [
         # PV-DM w/ concatenation - big, slow, experimental mode
