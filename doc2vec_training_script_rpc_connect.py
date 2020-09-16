@@ -1,13 +1,16 @@
 # coding: utf-8
+import math
 import os
 import collections
 from multiprocessing import Process, Pipe
+import argparse
 
 from gensim.models.doc2vec import Doc2Vec
 import numpy as np
 
 import smart_open
 from pymongo import MongoClient
+from urllib.parse import quote_plus
 
 import pika
 import uuid
@@ -16,22 +19,25 @@ import bson
 import logging
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
-DB_HOST = '172.17.0.1'
+DB_HOST = '127.0.0.1'
 DB_PORT = 27017
 DB_USER = 'bottrainer'
 DB_UPASS = '111'
 
 RABBITMQ_HOST = 'localhost'
 
-RESPONSE_NUMBER = 100
+RESPONSE_NUMBER = 8
 
-TAG_SPLITTER = ']~['
-TEXT_SPLITTER = '>|<'
+BATCH_SIZE = 100000
 END_SIGNAL = '<!END!>'
 
 SentimentDocument = collections.namedtuple('SentimentDocument', 'words tags')
 
 # credentials = pika.PlainCredentials('myrabbit', '111')
+
+parser = argparse.ArgumentParser(description='Rabbitmq RPC corpus channel')
+parser.add_argument('--database')
+args = parser.parse_args()
 
 
 class CorpusRpcClient(object):
@@ -78,47 +84,27 @@ class MyCorpus(object):
         self.onhold_messsages = []
         self.receiver = receiver
 
-    def _opt_collection(self, client):
-        if self.dataset == 'imdb':
-            db = client.imdb_reviews
-            return db.reviews
-
-        if self.dataset == 'blog':
-            db = client.bloggercom
-            return db.posts
-
-        if self.dataset == 'wiki':
-            db = client.enwik8
-            return db.docs
-
-        if self.dataset == 'mycorus':
-            db = client.mycorus
-            return db.docs
-
-        if self.dataset == 'thefinal':
-            db = client.thefinal
-            return db.docs
-
-        raise Exception("No valid database")
-
     def __iter__(self):
         while True:
             # print('<RECEIVED>')
             message = self.receiver.recv()
-            if message == END_SIGNAL:
+            if message[0]['text'] == END_SIGNAL:
+                print('<CORPUS ITERATOR> End of dataset.')
                 break
-            yield message
+            else:
+                for doc in message:
+                    yield (SentimentDocument(doc['text'].split(' '), [int(doc['tag'])]))
 
     def get_doc_by_index(self, index):
         with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
-            dbcollection = self._opt_collection(client)
+            dbcollection = opt_collection(client)
             review = dbcollection.find_one({'tag': index})
 
             return review['text']
 
     def count(self):
         with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
-            dbcollection = self._opt_collection(client)
+            dbcollection = opt_collection(client)
 
             return dbcollection.count_documents({})
 
@@ -129,6 +115,22 @@ class MyCorpus(object):
         return random_index, self.get_doc_by_index(random_index)
 
 
+def opt_collection(client):
+    database = args.database
+    if not database:
+        raise Exception("No mongodb database specified")
+
+    if database == 'thefinal':
+        db = client.thefinal
+        return db.docs
+
+    if database == 'enwik9':
+        db = client.enwik9
+        return db.docs
+
+    raise Exception("Invalid mongodb database name")
+
+
 def pick_random_word(model, threshold=1000):
     # pick a random word with a suitable number of occurences
     while True:
@@ -137,7 +139,38 @@ def pick_random_word(model, threshold=1000):
             return word
 
 
-def get_data(rpc_client):
+def count_documents(dbcollection):
+    return dbcollection.count_documents({})
+
+
+def mongo_buf():
+    with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
+        dbcollection = opt_collection(client)
+        total = count_documents(dbcollection)
+
+        while True:
+            count = 0
+            for index in range(0, math.ceil(total / BATCH_SIZE)):
+                print("<MONGO CLIENT> Caching batch index: %d" % (index))
+
+                batches = dbcollection.find_raw_batches(
+                        {'batch_index': index},
+                        projection={"_id": False, "batch_index": False},
+                        no_cursor_timeout=True
+                    )
+
+                for batch in batches:
+                    count += 1
+                    yield batch
+
+            print("\n")
+            print('<END>: %d batches of document have been served.' % (count))
+            print("------------------------------------")
+
+            yield bson.BSON.encode({'text': END_SIGNAL})
+
+
+def rpc_buf(rpc_client):
     while True:
         response = rpc_client.call()
         if not response:
@@ -146,22 +179,19 @@ def get_data(rpc_client):
         yield response
 
 
-def thread_data_buffer(rpc_client, sender):
-    iterable_data = get_data(rpc_client)
+def thread_data_buffer(sender):
+    data_buffer = mongo_buf()
 
     while True:
         responses = []
         for i in range(RESPONSE_NUMBER):
-            responses.append(next(iterable_data))
+            response = next(data_buffer)
+            response = bson.decode_all(response)
+            responses.append(response)
 
         for response in responses:
-            if response == bytearray(END_SIGNAL, "utf-8"):
-                print('End of dataset.')
-                sender.send(response.decode('utf-8'))
-            else:
-                response = bson.decode_all(response)
-                for doc in response:
-                    sender.send(SentimentDocument(doc['text'].split(' '), [int(doc['tag'])]))
+            # print('<SEND>')
+            sender.send(response)
 
 
 def sanity_check_datasource(mycorpus):
@@ -184,11 +214,11 @@ def sanity_check_datasource(mycorpus):
 
 
 def train(name, common_kwargs, saved_fname, evaluate=False):
-    rpc_client = CorpusRpcClient(RABBITMQ_HOST)
+    # rpc_client = CorpusRpcClient(RABBITMQ_HOST)
 
     receiver, sender = Pipe(False)
 
-    multi_process = Process(target=thread_data_buffer, args=(rpc_client, sender))
+    multi_process = Process(target=thread_data_buffer, args=(sender,))
     multi_process.daemon = True
     multi_process.start()
 
@@ -199,7 +229,7 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     simple_models = [
         # PV-DM w/ concatenation - big, slow, experimental mode
         # window=5 (both sides) approximates paper's apparent 10-word total window size
-        Doc2Vec(workers=8, queue_factor=4, **common_kwargs),
+        Doc2Vec(workers=10, queue_factor=4, **common_kwargs),
     ]
 
     if not evaluate:
