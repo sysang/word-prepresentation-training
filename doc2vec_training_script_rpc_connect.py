@@ -26,7 +26,7 @@ DB_UPASS = '111'
 
 RABBITMQ_HOST = 'localhost'
 
-RESPONSE_NUMBER = 8
+RESPONSE_NUMBER = 4
 
 BATCH_SIZE = 100000
 END_SIGNAL = '<!END!>'
@@ -86,13 +86,12 @@ class MyCorpus(object):
 
     def __iter__(self):
         while True:
-            # print('<RECEIVED>')
-            message = self.receiver.recv()
-            if message[0]['text'] == END_SIGNAL:
-                print('<CORPUS ITERATOR> End of dataset.')
-                break
-            else:
-                for doc in message:
+            messages = self.receiver.recv()
+            for doc in messages:
+                if doc['text'] == END_SIGNAL:
+                    print('<CORPUS ITERATOR> End of dataset.')
+                    return
+                else:
                     yield (SentimentDocument(doc['text'].split(' '), [int(doc['tag'])]))
 
     def get_doc_by_index(self, index):
@@ -183,15 +182,19 @@ def thread_data_buffer(sender):
     data_buffer = mongo_buf()
 
     while True:
-        responses = []
+        messages = []
         for i in range(RESPONSE_NUMBER):
             response = next(data_buffer)
             response = bson.decode_all(response)
-            responses.append(response)
+            for doc in response:
+                messages.append(doc)
 
-        for response in responses:
-            # print('<SEND>')
-            sender.send(response)
+            if response[0]['text'] == END_SIGNAL:
+                break
+
+        print('<SENDING...>')
+        sender.send(messages)
+        print('<RECEIVED>')
 
 
 def sanity_check_datasource(mycorpus):
