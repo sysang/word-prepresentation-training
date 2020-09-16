@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import pika
 import uuid
+import pickle
 
 credentials = pika.PlainCredentials('myrabbit', '111')
 host = "localhost"
@@ -42,32 +43,50 @@ class MongodbRpcClient(object):
         return self.response
 
 
-fibonacci_rpc = MongodbRpcClient()
+db_client = MongodbRpcClient()
 
-while True:
-    response = fibonacci_rpc.call()
 
-    if not response:
-        raise StopIteration("Response is empty")
+def test_concatenating_method():
+    while True:
+        response = db_client.call()
 
-    try:
-        response = response.decode('utf-8')
-        splited = response.split('>|<')
+        if not response:
+            raise StopIteration("Response is empty")
 
-        next, _ = splited[0].split(']~[', 1)
-        next = int(next)
-        print("first tag of batch:  %d" % (next))
+        try:
+            response = response.decode('utf-8')
+            splited = response.split('>|<')
 
-        for s in splited:
-            tag, _ = s.split(']~[', 1)
-            if int(tag) != next:
-                print("tag - %s vs next - %s" % (tag, next))
-                raise Exception("There is bug in data source.")
-            next = int(tag) + 1
+            next, _ = splited[0].split(']~[', 1)
+            next = int(next)
+            print("first tag of batch:  %d" % (next))
 
-        print("last tag of batch:   %s" % (tag))
+            for s in splited:
+                tag, _ = s.split(']~[', 1)
+                if int(tag) != next:
+                    print("tag - %s vs next - %s" % (tag, next))
+                    raise Exception("There is bug in data source.")
+                next = int(tag) + 1
 
-    except Exception as e:
-        print("RESPONSE: " + response)
-        # raise e
+            print("last tag of batch:   %s" % (tag))
 
+        except Exception as e:
+            print("RESPONSE: " + response)
+            # raise e
+
+
+def test_pickle_method():
+    while True:
+        response = db_client.call()
+
+        if not response:
+            raise StopIteration("Response is empty")
+
+        # print(response)
+
+        data = pickle.loads(response, encoding="utf-8")
+        print(data[0])
+
+
+if __name__ == "__main__":
+    test_pickle_method()

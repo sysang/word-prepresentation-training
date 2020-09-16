@@ -2,12 +2,15 @@
 import math
 import argparse
 import time
-from collections import deque
+import pickle
+from collections import deque, namedtuple
 
 from pymongo import MongoClient
 
 import _thread
 import pika
+
+SentimentDocument = namedtuple('SentimentDocument', 'words tags')
 
 parser = argparse.ArgumentParser(description='Rabbitmq RPC corpus channel')
 parser.add_argument('--database')
@@ -26,7 +29,8 @@ DB_USER = 'bottrainer'
 DB_UPASS = '111'
 
 batch_size = 100000  # must be appropriated with the 'batch_index' key in db
-buffer_number = 6
+buffer_number = 21
+END_SIGNAL = ['<!END!>']
 
 
 def opt_collection(client):
@@ -59,20 +63,21 @@ def data_buf():
             for index in range(0, math.ceil(total / batch_size)):
                 print("Caching batch index: %d" % (index))
 
-                docs = dbcollection.find({'batch_index': index}, projection={"_id": False}).batch_size(20000)
+                docs = dbcollection.find({'batch_index': index}, projection={"_id": False}).batch_size(10000)
 
-                result = ''
+                result = []
                 for sentense in list(docs):
-                    concatenated = str(sentense['tag']) + ']~[' + sentense['text']
-                    result += '>|<' + concatenated
+                    doc = (sentense['text'], [int(sentense['tag'])])
+                    result.append(doc)
                     count += 1
-                yield result[3:]
+
+                yield pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
 
             print("\n")
             print('<END>: %d documents have been served.' % (count))
             print("------------------------------------")
 
-            yield ('<!END!>')
+            yield pickle.dumps(END_SIGNAL, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 def stack_data(__buffer, d):
@@ -102,7 +107,7 @@ def on_request(ch, method, props, body, d):
 
     ch.basic_publish(exchange='', routing_key=props.reply_to,
                      properties=pika.BasicProperties(correlation_id=props.correlation_id),
-                     body=str(response))
+                     body=response)
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
 

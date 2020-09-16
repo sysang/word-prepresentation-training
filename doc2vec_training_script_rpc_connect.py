@@ -11,6 +11,7 @@ from pymongo import MongoClient
 
 import pika
 import uuid
+import pickle
 
 import logging
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
@@ -22,11 +23,11 @@ DB_UPASS = '111'
 
 RABBITMQ_HOST = 'localhost'
 
-RESPONSE_NUMBER = 3
+RESPONSE_NUMBER = 7
 
 TAG_SPLITTER = ']~['
 TEXT_SPLITTER = '>|<'
-END_SIGNAL = '<!END!>'
+END_SIGNAL = ['<!END!>']
 
 SentimentDocument = collections.namedtuple('SentimentDocument', 'words tags')
 
@@ -104,10 +105,12 @@ class MyCorpus(object):
         while True:
             # print('~~~~~~~~~~~~~~~~~~~~~ I AM HAVING NO JOB! ~~~~~~~~~~~~~~~~~~~~~~')
             # print('<RECEIVED>')
-            message = self.receiver.recv()
-            if message == END_SIGNAL:
+            message = self.receiver.recv_bytes()
+            message = pickle.loads(message)
+            if message[0] == END_SIGNAL[0]:
                 break
-            yield message
+            for text, tag in message:
+                yield SentimentDocument(text, tag)
 
     def get_doc_by_index(self, index):
         with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
@@ -146,13 +149,6 @@ def get_data(rpc_client):
         yield response
 
 
-def create_document_tag(concatenated_lines):
-    splited = concatenated_lines.split('>|<')
-    for line in splited:
-        tag, text = line.split(']~[', 1)
-        yield SentimentDocument(text.split(' '), [int(tag)])
-
-
 def thread_data_buffer(rpc_client, sender):
     iterable_data = get_data(rpc_client)
 
@@ -164,14 +160,7 @@ def thread_data_buffer(rpc_client, sender):
 
         for response in responses:
             # print('<SENT>')
-            response = response.decode('utf-8')
-            if not response == END_SIGNAL:
-                tag_documents = create_document_tag(response)
-                for doc in tag_documents:
-                    sender.send(doc)
-            else:
-                sender.send(response)
-
+            sender.send_bytes(response)
 
 def sanity_check_datasource(mycorpus):
     while True:
