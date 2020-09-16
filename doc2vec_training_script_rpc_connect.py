@@ -22,7 +22,11 @@ DB_UPASS = '111'
 
 RABBITMQ_HOST = 'localhost'
 
-MESSAGE_NUMBER = 15
+RESPONSE_NUMBER = 3
+
+TAG_SPLITTER = ']~['
+TEXT_SPLITTER = '>|<'
+END_SIGNAL = '<!END!>'
 
 SentimentDocument = collections.namedtuple('SentimentDocument', 'words tags')
 
@@ -69,6 +73,7 @@ class CorpusRpcClient(object):
 class MyCorpus(object):
     def __init__(self, name, receiver):
         self.dataset = name
+        self.total_count = self.count()
         self.onhold_messsages = []
         self.receiver = receiver
 
@@ -95,24 +100,14 @@ class MyCorpus(object):
 
         raise Exception("No valid database")
 
-    def create_document_tag(self, message):
-        splited = message.split('>|<')
-        for doc in splited:
-            tag, text = doc.split(']~[', 1)
-            yield SentimentDocument(text.split(' '), [int(tag)])
-
     def __iter__(self):
         while True:
             # print('~~~~~~~~~~~~~~~~~~~~~ I AM HAVING NO JOB! ~~~~~~~~~~~~~~~~~~~~~~')
             # print('<RECEIVED>')
-            message = self.receiver.recv_bytes()
-            message = message.decode('utf-8')
-            if message == ('<!END!>'):
+            message = self.receiver.recv()
+            if message == END_SIGNAL:
                 break
-
-            tag_documents = self.create_document_tag(message)
-            for doc in tag_documents:
-                yield doc
+            yield message
 
     def get_doc_by_index(self, index):
         with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
@@ -151,18 +146,31 @@ def get_data(rpc_client):
         yield response
 
 
+def create_document_tag(concatenated_lines):
+    splited = concatenated_lines.split('>|<')
+    for line in splited:
+        tag, text = line.split(']~[', 1)
+        yield SentimentDocument(text.split(' '), [int(tag)])
+
+
 def thread_data_buffer(rpc_client, sender):
     iterable_data = get_data(rpc_client)
 
     while True:
         # print('~~~~~~~~~~~~~~~~~~~~~ I AM DOING NOTHING! ~~~~~~~~~~~~~~~~~~~~~~')
-        messages = []
-        for i in range(MESSAGE_NUMBER):
-            messages.append(next(iterable_data))
+        responses = []
+        for i in range(RESPONSE_NUMBER):
+            responses.append(next(iterable_data))
 
-        for message in messages:
+        for response in responses:
             # print('<SENT>')
-            sender.send_bytes(message)
+            response = response.decode('utf-8')
+            if not response == END_SIGNAL:
+                tag_documents = create_document_tag(response)
+                for doc in tag_documents:
+                    sender.send(doc)
+            else:
+                sender.send(response)
 
 
 def sanity_check_datasource(mycorpus):
