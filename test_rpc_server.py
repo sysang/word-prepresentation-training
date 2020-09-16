@@ -2,6 +2,10 @@
 import pika
 import uuid
 import pickle
+import bson
+from bson.codec_options import CodecOptions
+
+import collections
 
 credentials = pika.PlainCredentials('myrabbit', '111')
 host = "localhost"
@@ -76,17 +80,43 @@ def test_concatenating_method():
 
 
 def test_pickle_method():
-    while True:
-        response = db_client.call()
+    try:
+        while True:
+            response = db_client.call()
 
-        if not response:
-            raise StopIteration("Response is empty")
+            if not response:
+                raise StopIteration("Response is empty")
 
-        # print(response)
+            # print(response)
+            data = pickle.loads(response)
+            if data == '<!END!>':
+                print(data)
 
-        data = pickle.loads(response, encoding="utf-8")
-        print(data[0])
+    except Exception as error:
+        print(data)
+        raise error
+
+
+def test_bson_method():
+    try:
+        while True:
+            response = db_client.call()
+
+            if not response:
+                raise StopIteration("Response is empty")
+
+            # print(response)
+
+            if response == bytearray('<!END!>', "utf8"):
+                print(response)
+            else:
+                data = bson.decode_all(response)
+                print(data[0])
+    except Exception as error:
+        print(response)
+        raise error
 
 
 if __name__ == "__main__":
-    test_pickle_method()
+    # test_pickle_method()
+    test_bson_method()

@@ -11,7 +11,7 @@ from pymongo import MongoClient
 
 import pika
 import uuid
-import pickle
+import bson
 
 import logging
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
@@ -23,11 +23,11 @@ DB_UPASS = '111'
 
 RABBITMQ_HOST = 'localhost'
 
-RESPONSE_NUMBER = 7
+RESPONSE_NUMBER = 100
 
 TAG_SPLITTER = ']~['
 TEXT_SPLITTER = '>|<'
-END_SIGNAL = ['<!END!>']
+END_SIGNAL = '<!END!>'
 
 SentimentDocument = collections.namedtuple('SentimentDocument', 'words tags')
 
@@ -103,14 +103,11 @@ class MyCorpus(object):
 
     def __iter__(self):
         while True:
-            # print('~~~~~~~~~~~~~~~~~~~~~ I AM HAVING NO JOB! ~~~~~~~~~~~~~~~~~~~~~~')
             # print('<RECEIVED>')
-            message = self.receiver.recv_bytes()
-            message = pickle.loads(message)
-            if message[0] == END_SIGNAL[0]:
+            message = self.receiver.recv()
+            if message == END_SIGNAL:
                 break
-            for text, tag in message:
-                yield SentimentDocument(text, tag)
+            yield message
 
     def get_doc_by_index(self, index):
         with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
@@ -153,28 +150,37 @@ def thread_data_buffer(rpc_client, sender):
     iterable_data = get_data(rpc_client)
 
     while True:
-        # print('~~~~~~~~~~~~~~~~~~~~~ I AM DOING NOTHING! ~~~~~~~~~~~~~~~~~~~~~~')
         responses = []
         for i in range(RESPONSE_NUMBER):
             responses.append(next(iterable_data))
 
         for response in responses:
-            # print('<SENT>')
-            sender.send_bytes(response)
+            if response == bytearray(END_SIGNAL, "utf-8"):
+                print('End of dataset.')
+                sender.send(response.decode('utf-8'))
+            else:
+                response = bson.decode_all(response)
+                for doc in response:
+                    sender.send(SentimentDocument(doc['text'].split(' '), [int(doc['tag'])]))
+
 
 def sanity_check_datasource(mycorpus):
-    while True:
-        next = 0
-        tag = 0
-        for doc in mycorpus:
-            tag = doc.tags[0]
-            if tag != next:
-                print("tag - %s vs next - %s" % (tag, next))
-                raise Exception("There is a break in data source.")
-            next = tag + 1
+    try:
+        while True:
+            next = 0
+            tag = 0
+            for doc in mycorpus:
+                tag = doc.tags[0]
+                if tag != next:
+                    print("tag - %s vs next - %s" % (tag, next))
+                    raise Exception("There is a break in data source.")
+                next = tag + 1
 
-        print("** DONE *** Last tag: %s" % (tag))
-        print("\n")
+            print("** DONE *** Last tag: %s" % (tag))
+            print("\n")
+    except Exception as error:
+        print(doc)
+        raise error
 
 
 def train(name, common_kwargs, saved_fname, evaluate=False):
@@ -201,14 +207,13 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
             model.build_vocab(mycorpus)
             print("%s vocabulary scanned & state initialized" % model)
             model.train(mycorpus, total_examples=mycorpus.total_count, epochs=model.epochs)
+            print('*** Training has completed. ***')
     else:
         simple_models = [
             # PV-DM w/ concatenation - big, slow, experimental mode
             # window=5 (both sides) approximates paper's apparent 10-word total window size
             Doc2Vec.load(saved_fname),
         ]
-
-    multi_process.join()
 
     # EXAMINING RESULTS
     #
@@ -357,3 +362,5 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     print("             ____________     COMPLETED          ___________________________      ")
     print("#~~~~~~~~###~~~~~~~~~~~~##~~~~~~~~~~~#~~~~~~~~~~~~~~~##~~~~~~~~~~~~###~~~~~~~~~~~~~#")
     print("\n")
+
+    multi_process.join()

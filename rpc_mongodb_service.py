@@ -6,6 +6,7 @@ import pickle
 from collections import deque, namedtuple
 
 from pymongo import MongoClient
+import bson
 
 import _thread
 import pika
@@ -28,9 +29,9 @@ DB_PORT = 27017
 DB_USER = 'bottrainer'
 DB_UPASS = '111'
 
-batch_size = 100000  # must be appropriated with the 'batch_index' key in db
-buffer_number = 21
-END_SIGNAL = ['<!END!>']
+BATCH_SIZE = 100000
+BUFFER_NUMBER = 100
+END_SIGNAL = '<!END!>'
 
 
 def opt_collection(client):
@@ -60,30 +61,27 @@ def data_buf():
 
         while True:
             count = 1
-            for index in range(0, math.ceil(total / batch_size)):
+            for index in range(0, math.ceil(total / BATCH_SIZE)):
                 print("Caching batch index: %d" % (index))
 
-                docs = dbcollection.find({'batch_index': index}, projection={"_id": False}).batch_size(10000)
+                batches = dbcollection.find_raw_batches({'batch_index': index}, projection={"_id": False, "batch_index": False})
 
-                result = []
-                for sentense in list(docs):
-                    doc = (sentense['text'], [int(sentense['tag'])])
-                    result.append(doc)
-                    count += 1
+                for batch in batches:
+                    yield batch
 
-                yield pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
+                count += 1
 
             print("\n")
-            print('<END>: %d documents have been served.' % (count))
+            print('<END>: %d batches of document have been served.' % (count))
             print("------------------------------------")
 
-            yield pickle.dumps(END_SIGNAL, protocol=pickle.HIGHEST_PROTOCOL)
+            yield END_SIGNAL
 
 
 def stack_data(__buffer, d):
     while True:
-        if len(d) < math.floor(buffer_number / 1.1):
-            while len(d) < buffer_number:
+        if len(d) < math.floor(BUFFER_NUMBER / 1.1):
+            while len(d) < BUFFER_NUMBER:
                 result = next(__buffer)
                 d.appendleft(result)
                 print('Stacked item, cache buffer length %d' % (len(d)))
@@ -118,7 +116,7 @@ def on_request_wrapper(d):
 
 
 def main():
-    d = deque(maxlen=buffer_number)
+    d = deque(maxlen=BUFFER_NUMBER)
     buffer = data_buf()
     _thread.start_new_thread(stack_data, (buffer, d))
 
