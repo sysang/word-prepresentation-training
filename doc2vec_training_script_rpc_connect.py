@@ -11,7 +11,7 @@ import numpy as np
 import smart_open
 from pymongo import MongoClient
 
-from multiprocessing import Process, Queue, Value
+from multiprocessing import Process, Value, Manager
 import ctypes
 
 import pika
@@ -93,7 +93,7 @@ class MyCorpus(object):
 
         while True:
             next_order = self.iteration_index % rotator
-            buffer = self.queue_buffers[next_order]
+            # buffer = self.queue_buffers[next_order]
             is_full = self.buffer_size_status[next_order]
             is_empty = self.buffer_emptiness_status[next_order]
 
@@ -103,7 +103,7 @@ class MyCorpus(object):
                 continue
 
             # print('\t\t\t<UNLOADING...> %s' % (next_order))
-            docs = pickle.loads(buffer.get())
+            docs = pickle.loads(self.queue_buffers[next_order])
 
             if docs[0]['text'] == END_SIGNAL:
                 print('<CORPUS ITERATOR> End of dataset.')
@@ -213,10 +213,9 @@ def thread_data_buffer(queue_buffers, buffer_size_status, buffer_emptiness_statu
     rotator = len(queue_buffers)
 
     index = 0
-    buffer = None
     while True:
         next_order = index % rotator
-        buffer = queue_buffers[next_order]
+        # buffer = queue_buffers[next_order]
         is_full = buffer_size_status[next_order]
         is_empty = buffer_emptiness_status[next_order]
 
@@ -227,7 +226,7 @@ def thread_data_buffer(queue_buffers, buffer_size_status, buffer_emptiness_statu
 
         # print('<STACKING ...> %s' % (next_order))
         response = next(data_buffer)
-        buffer.put(pickle.dumps(response))
+        queue_buffers[next_order] = pickle.dumps(response)
 
         is_full.value = True
         is_empty.value = False
@@ -256,11 +255,12 @@ def sanity_check_datasource(mycorpus):
 
 
 def train(name, common_kwargs, saved_fname, evaluate=False):
-    queue_buffers = []
+    m = Manager()
+    queue_buffers = m.list()
     buffer_size_status = []
     buffer_emptiness_status = []
     for i in range(BUFFER_NUMBER):
-        queue_buffers.append(Queue())
+        queue_buffers.append(None)
         buffer_size_status.append(Value(ctypes.c_bool, False))
         buffer_emptiness_status.append(Value(ctypes.c_bool, True))
 
