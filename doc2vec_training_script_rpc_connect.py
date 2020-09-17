@@ -103,7 +103,7 @@ class MyCorpus(object):
                 continue
 
             # print('\t\t\t<UNLOADING...> %s' % (next_order))
-            # docs = pickle.loads(buffer.get())
+            docs = pickle.loads(buffer.get())
 
             if docs[0]['text'] == END_SIGNAL:
                 print('<CORPUS ITERATOR> End of dataset.')
