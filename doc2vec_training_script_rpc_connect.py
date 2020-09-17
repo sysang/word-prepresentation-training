@@ -2,19 +2,21 @@
 import math
 import os
 import collections
-from multiprocessing import Process, Pipe
 import argparse
+import time
 
 from gensim.models.doc2vec import Doc2Vec
 import numpy as np
 
 import smart_open
 from pymongo import MongoClient
-from urllib.parse import quote_plus
+
+from multiprocessing import Process, Queue, Value
+import ctypes
 
 import pika
 import uuid
-import bson
+import pickle
 
 import logging
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
@@ -26,7 +28,7 @@ DB_UPASS = '111'
 
 RABBITMQ_HOST = 'localhost'
 
-RESPONSE_NUMBER = 4
+BUFFER_NUMBER = 3
 
 BATCH_SIZE = 100000
 END_SIGNAL = '<!END!>'
@@ -78,21 +80,46 @@ class CorpusRpcClient(object):
 
 
 class MyCorpus(object):
-    def __init__(self, name, receiver):
+    def __init__(self, name, queue_buffers, buffer_size_status, buffer_emptiness_status):
         self.dataset = name
         self.total_count = self.count()
-        self.onhold_messsages = []
-        self.receiver = receiver
+        self.queue_buffers = queue_buffers
+        self.buffer_size_status = buffer_size_status
+        self.buffer_emptiness_status = buffer_emptiness_status
+        self.iteration_index = 0
 
     def __iter__(self):
+        rotator = len(self.queue_buffers)
+
         while True:
-            messages = self.receiver.recv()
-            for doc in messages:
-                if doc['text'] == END_SIGNAL:
-                    print('<CORPUS ITERATOR> End of dataset.')
-                    return
-                else:
-                    yield (SentimentDocument(doc['text'].split(' '), [int(doc['tag'])]))
+            next_order = self.iteration_index % rotator
+            buffer = self.queue_buffers[next_order]
+            is_full = self.buffer_size_status[next_order]
+            is_empty = self.buffer_emptiness_status[next_order]
+
+            if not is_full.value:
+                # print('<WAITING...> %s' % (next_order))
+                time.sleep(0.001)
+                continue
+
+            # print('\t\t\t<UNLOADING...> %s' % (next_order))
+            # docs = pickle.loads(buffer.get())
+
+            if docs[0]['text'] == END_SIGNAL:
+                print('<CORPUS ITERATOR> End of dataset.')
+                is_full.value = False
+                is_empty.value = True
+                self.iteration_index += 1
+                break
+
+            for doc in docs:
+                yield SentimentDocument(doc['text'].split(' '), [int(doc['tag'])])
+
+            is_full.value = False
+            is_empty.value = True
+            # print('\t\t\t<LOADED> %s' % (next_order))
+            # print('\t\t\t<STATUS> %s' % ([b.value for b in self.buffer_size_status]))
+            self.iteration_index += 1
 
     def get_doc_by_index(self, index):
         with MongoClient(DB_HOST, DB_PORT, username=DB_USER, password=DB_UPASS) as client:
@@ -127,6 +154,10 @@ def opt_collection(client):
         db = client.enwik9
         return db.docs
 
+    if database == 'bloggercom':
+        db = client.bloggercom
+        return db.posts
+
     raise Exception("Invalid mongodb database name")
 
 
@@ -150,23 +181,22 @@ def mongo_buf():
         while True:
             count = 0
             for index in range(0, math.ceil(total / BATCH_SIZE)):
-                print("<MONGO CLIENT> Caching batch index: %d" % (index))
+                # print("<MONGO CLIENT> Caching batch index: %d" % (index))
 
-                batches = dbcollection.find_raw_batches(
+                batch = dbcollection.find(
                         {'batch_index': index},
                         projection={"_id": False, "batch_index": False},
                         no_cursor_timeout=True
                     )
 
-                for batch in batches:
-                    count += 1
-                    yield batch
+                count += 1
+                yield list(batch)
 
             print("\n")
-            print('<END>: %d batches of document have been served.' % (count))
+            print('<END>: %d mini batches of document have been served.' % (count))
             print("------------------------------------")
 
-            yield bson.BSON.encode({'text': END_SIGNAL})
+            yield [{'text': END_SIGNAL, 'tag': -1}]
 
 
 def rpc_buf(rpc_client):
@@ -178,23 +208,32 @@ def rpc_buf(rpc_client):
         yield response
 
 
-def thread_data_buffer(sender):
+def thread_data_buffer(queue_buffers, buffer_size_status, buffer_emptiness_status):
     data_buffer = mongo_buf()
+    rotator = len(queue_buffers)
 
+    index = 0
+    buffer = None
     while True:
-        messages = []
-        for i in range(RESPONSE_NUMBER):
-            response = next(data_buffer)
-            response = bson.decode_all(response)
-            for doc in response:
-                messages.append(doc)
+        next_order = index % rotator
+        buffer = queue_buffers[next_order]
+        is_full = buffer_size_status[next_order]
+        is_empty = buffer_emptiness_status[next_order]
 
-            if response[0]['text'] == END_SIGNAL:
-                break
+        if not is_empty.value:
+            # print("<SLEEPING> %s" % (next_order))
+            time.sleep(0.001)
+            continue
 
-        print('<SENDING...>')
-        sender.send(messages)
-        print('<RECEIVED>')
+        # print('<STACKING ...> %s' % (next_order))
+        response = next(data_buffer)
+        buffer.put(pickle.dumps(response))
+
+        is_full.value = True
+        is_empty.value = False
+        index += 1
+        # print('<SENT> %s' % (next_order))
+        # print('<STATUS> %s' % ([b.value for b in buffer_size_status]))
 
 
 def sanity_check_datasource(mycorpus):
@@ -217,15 +256,19 @@ def sanity_check_datasource(mycorpus):
 
 
 def train(name, common_kwargs, saved_fname, evaluate=False):
-    # rpc_client = CorpusRpcClient(RABBITMQ_HOST)
+    queue_buffers = []
+    buffer_size_status = []
+    buffer_emptiness_status = []
+    for i in range(BUFFER_NUMBER):
+        queue_buffers.append(Queue())
+        buffer_size_status.append(Value(ctypes.c_bool, False))
+        buffer_emptiness_status.append(Value(ctypes.c_bool, True))
 
-    receiver, sender = Pipe(False)
-
-    multi_process = Process(target=thread_data_buffer, args=(sender,))
+    multi_process = Process(target=thread_data_buffer, args=(queue_buffers, buffer_size_status, buffer_emptiness_status))
     multi_process.daemon = True
     multi_process.start()
 
-    mycorpus = MyCorpus(name, receiver)
+    mycorpus = MyCorpus(name, queue_buffers, buffer_size_status, buffer_emptiness_status)
 
     # sanity_check_datasource(mycorpus)
 
@@ -247,6 +290,8 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
             # window=5 (both sides) approximates paper's apparent 10-word total window size
             Doc2Vec.load(saved_fname),
         ]
+
+    multi_process.join()
 
     # EXAMINING RESULTS
     #
@@ -395,5 +440,3 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     print("             ____________     COMPLETED          ___________________________      ")
     print("#~~~~~~~~###~~~~~~~~~~~~##~~~~~~~~~~~#~~~~~~~~~~~~~~~##~~~~~~~~~~~~###~~~~~~~~~~~~~#")
     print("\n")
-
-    multi_process.join()
