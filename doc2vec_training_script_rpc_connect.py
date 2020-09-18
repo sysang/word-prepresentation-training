@@ -28,7 +28,7 @@ DB_UPASS = '111'
 
 RABBITMQ_HOST = 'localhost'
 
-BUFFER_NUMBER = 3
+BUFFER_NUMBER = 5
 
 BATCH_SIZE = 100000
 END_SIGNAL = '<!END!>'
@@ -99,7 +99,7 @@ class MyCorpus(object):
 
             if not is_full.value:
                 # print('<WAITING...> %s' % (next_order))
-                time.sleep(0.001)
+                time.sleep(0.01)
                 continue
 
             # print('\t\t\t<UNLOADING...> %s' % (next_order))
@@ -221,7 +221,7 @@ def thread_data_buffer(queue_buffers, buffer_size_status, buffer_emptiness_statu
 
         if not is_empty.value:
             # print("<SLEEPING> %s" % (next_order))
-            time.sleep(0.001)
+            time.sleep(0.01)
             continue
 
         # print('<STACKING ...> %s' % (next_order))
@@ -267,6 +267,7 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     multi_process = Process(target=thread_data_buffer, args=(queue_buffers, buffer_size_status, buffer_emptiness_status))
     multi_process.daemon = True
     multi_process.start()
+    print("Start child process for buffering data, PID %s" % (multi_process.pid))
 
     mycorpus = MyCorpus(name, queue_buffers, buffer_size_status, buffer_emptiness_status)
 
@@ -290,8 +291,6 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
             # window=5 (both sides) approximates paper's apparent 10-word total window size
             Doc2Vec.load(saved_fname),
         ]
-
-    multi_process.join()
 
     # EXAMINING RESULTS
     #
@@ -321,6 +320,9 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
         print("Save model to: " + save_to)
 
         model.save(save_to)
+
+    # Terminate data buffering process
+    multi_process.terminate()
 
     # Are inferred vectors close to the precalculated ones?
     # -------------------------------------------------------
