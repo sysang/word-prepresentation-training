@@ -11,7 +11,7 @@ import numpy as np
 import smart_open
 from pymongo import MongoClient
 
-from multiprocessing import Process, Value, Manager
+from multiprocessing import Process, Value, Queue
 import ctypes
 
 import pika
@@ -38,7 +38,8 @@ SentimentDocument = collections.namedtuple('SentimentDocument', 'words tags')
 # credentials = pika.PlainCredentials('myrabbit', '111')
 
 parser = argparse.ArgumentParser(description='Rabbitmq RPC corpus channel')
-parser.add_argument('--database')
+parser.add_argument('--database', required=True)
+parser.add_argument('--check-dataset', type=int, dest='check_dataset', default=False)
 args = parser.parse_args()
 
 
@@ -103,10 +104,12 @@ class MyCorpus(object):
                 continue
 
             # print('\t\t\t<UNLOADING...> %s' % (next_order))
-            docs = pickle.loads(self.queue_buffers[next_order])
+            docs = pickle.loads(self.queue_buffers[next_order].get())
 
             if docs[0]['text'] == END_SIGNAL:
+                print('----------------------------------')
                 print('<CORPUS ITERATOR> End of dataset.')
+                print("----------------------------------")
                 is_full.value = False
                 is_empty.value = True
                 self.iteration_index += 1
@@ -192,9 +195,9 @@ def mongo_buf():
                 count += 1
                 yield list(batch)
 
-            print("\n")
+            print("---------------------------------------------------")
             print('<END>: %d mini batches of document have been served.' % (count))
-            print("------------------------------------")
+            print("---------------------------------------------------")
 
             yield [{'text': END_SIGNAL, 'tag': -1}]
 
@@ -226,7 +229,7 @@ def thread_data_buffer(queue_buffers, buffer_size_status, buffer_emptiness_statu
 
         # print('<STACKING ...> %s' % (next_order))
         response = next(data_buffer)
-        queue_buffers[next_order] = pickle.dumps(response)
+        queue_buffers[next_order].put(pickle.dumps(response))
 
         is_full.value = True
         is_empty.value = False
@@ -255,12 +258,11 @@ def sanity_check_datasource(mycorpus):
 
 
 def train(name, common_kwargs, saved_fname, evaluate=False):
-    m = Manager()
-    queue_buffers = m.list()
+    queue_buffers = []
     buffer_size_status = []
     buffer_emptiness_status = []
     for i in range(BUFFER_NUMBER):
-        queue_buffers.append(None)
+        queue_buffers.append(Queue(maxsize=1))
         buffer_size_status.append(Value(ctypes.c_bool, False))
         buffer_emptiness_status.append(Value(ctypes.c_bool, True))
 
@@ -271,7 +273,8 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
 
     mycorpus = MyCorpus(name, queue_buffers, buffer_size_status, buffer_emptiness_status)
 
-    # sanity_check_datasource(mycorpus)
+    if args.check_dataset:
+        sanity_check_datasource(mycorpus)
 
     simple_models = [
         # PV-DM w/ concatenation - big, slow, experimental mode
@@ -283,8 +286,11 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
         for model in simple_models:
             model.build_vocab(mycorpus)
             print("%s vocabulary scanned & state initialized" % model)
+
             model.train(mycorpus, total_examples=mycorpus.total_count, epochs=model.epochs)
-            print('*** Training has completed. ***')
+
+            print("\n")
+            print('\t\t\t\t\t *** TRAINING HAS COMPLETED. ***')
     else:
         simple_models = [
             # PV-DM w/ concatenation - big, slow, experimental mode
