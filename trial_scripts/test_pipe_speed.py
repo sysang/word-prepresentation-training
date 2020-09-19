@@ -16,7 +16,7 @@ def pipe_func(c, cond, iterations):
     c.send('STOP')
 
 
-def test_pipespeed():
+def test_pipe_speed():
     c, d = multiprocessing.Pipe()
     cond = multiprocessing.Condition()
     elapsed = 0
@@ -44,5 +44,3 @@ def test_pipespeed():
     print(iterations, 'objects passed through connection in', elapsed, 'seconds')
     print('average number/sec:', iterations/elapsed)
 
-
-test_pipespeed()

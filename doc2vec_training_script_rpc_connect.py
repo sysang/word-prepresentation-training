@@ -157,6 +157,10 @@ def opt_collection(client):
         db = client.enwik9
         return db.docs
 
+    if database == 'enwik8':
+        db = client.enwik8
+        return db.docs
+
     if database == 'bloggercom':
         db = client.bloggercom
         return db.posts
