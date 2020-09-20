@@ -41,8 +41,9 @@ def recursively_replace(__regex, repl, str):
 
 
 def extract_documents(dbcollection, regex_fname=None, fname=None, corpus=None, extrax_regexes=[]):
-    regex = re.compile(r"\(|\)|\<|\>|\{|\}|\_|\.|\,|\-\-|(^|\s)\-\s|\;|\:|\*|\#|\?|\!|\~|\[|\]|\\|\"|”|\=|\+|\\x85|\\x91|\\x96|urllink|nbsp|andnbsp|�|:-)", re.IGNORECASE)
-    regex_special_expression = re.compile("<.+>")
+    # regexes for single sentence
+    regex = re.compile(r"\(|\)|\<|\>|\{|\}|\_|\.|\,|\-{2,}|(^|\s)\-\s|\;|\:|\*|\#+|\~|\[|\]|\\|\"|”|\=|\+|\\x85|\\x91|\\x96|urllink|nbsp|andnbsp|�+|\:\-\)", re.IGNORECASE)
+    regex_special_expression = re.compile("LOL(.)*|<.+>", re.IGNORECASE)
     regex_prime = re.compile(r"(^|\s)(\w+)(\'s|\'d)", re.IGNORECASE)
     regex_dash = re.compile(r"(^|\s)(\w+)(\-\s)", re.IGNORECASE)
     regex_quote = re.compile(r"\s\'\s*(\w[\w\s]*\w)\s*\'(\s|$)", re.IGNORECASE)
@@ -71,7 +72,8 @@ def extract_documents(dbcollection, regex_fname=None, fname=None, corpus=None, e
 
         member_text = (
                 member_text.lower()
-                .replace('<br />', ' ').replace('<br/>', ' ').replace('...', '.')
+                .replace('<br />', ' ').replace('<br/>', ' ')
+                .replace('?', '. ').replace('!', '. ').replace('...', '. ')
                 .replace("\\", " ").replace(" / ", " ").replace(" ' ", " ")
                 .replace('&', 'and').replace("'n'", " and ").replace(" 'n ", " and ")
                 .replace("isn't", "is not").replace("'m", " am")
