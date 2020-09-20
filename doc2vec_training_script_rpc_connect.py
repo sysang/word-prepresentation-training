@@ -81,8 +81,7 @@ class CorpusRpcClient(object):
 
 
 class MyCorpus(object):
-    def __init__(self, name, queue_buffers, buffer_size_status, buffer_emptiness_status):
-        self.dataset = name
+    def __init__(self, queue_buffers, buffer_size_status, buffer_emptiness_status):
         self.total_count = self.count()
         self.queue_buffers = queue_buffers
         self.buffer_size_status = buffer_size_status
@@ -261,7 +260,7 @@ def sanity_check_datasource(mycorpus):
         raise error
 
 
-def train(name, common_kwargs, saved_fname, evaluate=False):
+def train(common_kwargs, saved_fname, evaluate=False):
     queue_buffers = []
     buffer_size_status = []
     buffer_emptiness_status = []
@@ -275,7 +274,7 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
     multi_process.start()
     print("Start child process for buffering data, PID %s" % (multi_process.pid))
 
-    mycorpus = MyCorpus(name, queue_buffers, buffer_size_status, buffer_emptiness_status)
+    mycorpus = MyCorpus(queue_buffers, buffer_size_status, buffer_emptiness_status)
 
     if args.check_dataset:
         sanity_check_datasource(mycorpus)
@@ -351,12 +350,12 @@ def train(name, common_kwargs, saved_fname, evaluate=False):
             rank = 1
             for (index, score) in similarities:
                 if index == random_index:
-                    print('** Matched with rank %s, score: %s' % (rank, score))
+                    print('[*] Matched with rank %s, score: %s!' % (rank, score))
                     print("\n")
                     break
                 rank += 1
             if rank == topn + 1:
-                print("!! No any match in top %s similarities" % (topn))
+                print("    No any match in top %s similarities." % (topn))
                 print("\n")
 
     # Do close documents seem more related than distant ones?

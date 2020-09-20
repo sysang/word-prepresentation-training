@@ -12,7 +12,12 @@ def enwik8(dbcollection):
     extrax_regexes = [(regex_xml_tag, repl)]
 
     for fname in fnames:
-        extract_documents(fname, dbcollection, regex_fname, extrax_regexes)
+        extract_documents(
+                fname=fname,
+                dbcollection=dbcollection,
+                regex_fname=regex_fname,
+                extrax_regexes=extrax_regexes
+                )
 
 
 if __name__ == "__main__":
@@ -23,4 +28,4 @@ if __name__ == "__main__":
         dbcollection.delete_many({})
 
         enwik8(dbcollection)
-        db.command({"reIndex": "docs"})
+        # db.command({"reIndex": "docs"})

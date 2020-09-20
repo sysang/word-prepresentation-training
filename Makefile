@@ -16,6 +16,9 @@ dump_enwik9:
 dump_gutenberg:
 	python3 dump_gutenberg_to_mongodb.py
 
+dump_usenet:
+	python3 dump_usenet_to_mongodb.py
+
 train:
 	python3 $(file) --check-dataset=0 --database=thefinal
 
