@@ -134,7 +134,7 @@ def extract_documents(dbcollection, regex_fname=None, fname=None, corpus=None, e
 
                 if bulk_vol >= 5000:
                     dbcollection.insert_many(docs)
-                    time.sleep(1)
+                    time.sleep(0.1)
                     docs.clear()
                     bulk_vol = 0
 
