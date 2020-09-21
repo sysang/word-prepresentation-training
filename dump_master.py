@@ -2,6 +2,7 @@ from pymongo import MongoClient
 import tarfile
 import re
 import math
+import time
 
 
 class TextCorpus():
@@ -131,9 +132,10 @@ def extract_documents(dbcollection, regex_fname=None, fname=None, corpus=None, e
                     print("\n")
                     print('-----------  BATCH INDEX: %s' % (batch_index) + '  --------------')
 
-                if bulk_vol >= 10000:
-                    print(doc['text'])
-                    dbcollection.insert_many(docs)
+                if bulk_vol >= 5000:
+                    # print(doc['text'])
+                    # dbcollection.insert_many(docs)
+                    time.sleep(1)
                     docs.clear()
                     bulk_vol = 0
 

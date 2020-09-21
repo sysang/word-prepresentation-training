@@ -11,3 +11,4 @@ models/**
 output/**
 haproxy
 rabbitmq
+tmp.txt

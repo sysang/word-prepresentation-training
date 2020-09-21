@@ -1,6 +1,9 @@
-import multiprocessing as mp
 import re
+from pymongo import MongoClient
+from dump_master import extract_documents
+import os
 import time
+import tarfile
 
 
 def filter_line(regexes, str, repl=" "):
@@ -20,6 +23,7 @@ def verify_line(regexes, str):
 class UsenetCorpus():
     def __init__(self, fname):
         self.fname = fname
+        self.regex_fname = re.compile(r'splits/\w\w$')
         self.verify_regexes = [
                 re.compile(r"\-\-\-END\.OF\.DOCUMENT\-\-\-", re.IGNORECASE),
                 re.compile(r"\<.*\>", re.IGNORECASE),
@@ -33,23 +37,37 @@ class UsenetCorpus():
                 ]
 
     def __iter__(self):
-        with open(self.fname, errors='replace') as f:
-            for line in f:
-                if line.strip().replace("\n", "").replace("\r\n", "") and verify_line(self.verify_regexes, line.strip()):
-                    yield(line)
+        # f is an install of bz2.BZ2File class
+        with tarfile.open(self.fname, mode='r:gz') as tar:
+            for member in tar.getmembers():
+                print(member.name)
+                if self.regex_fname.match(member.name):
+                    print(member.name)
+                    member_bytes = tar.extractfile(member).read()
+                    member_text = member_bytes.decode('utf-8', errors='replace')
+                    if member_text.strip().replace("\n", "").replace("\r\n", "") and verify_line(self.verify_regexes, member_text.strip()):
+                        yield member_text
+
+
+def usenet(dbcollection):
+    fname = "/archives/corpus/usenet_westburylab.splits.tar.gz"
+
+    count = 0
+    corpus = UsenetCorpus(fname)
+    for doc in corpus:
+        count += 1
+        if count % 100000 == 0:
+            print("Document counting: %d" % (count))
+
+    # extract_documents(dbcollection, corpus=corpus)
 
 
 if __name__ == "__main__":
-    fname = "/archives/corpus/WestburyLab-NonRedundant-UsenetCorpus/WestburyLab.NonRedundant.UsenetCorpus.txt"
-    text_corpus = UsenetCorpus(fname)
-    volume = 4000
-    skip = 200000
+    with MongoClient('127.0.0.1', 27017, username='myUserAdmin', password='111') as client:
+        db = client.usenet
+        dbcollection = db.docs
 
-    index = 0
-    for text in text_corpus:
-        index += 1
-        if not index > skip:
-            continue
-        print(text)
-        if index > skip + volume:
-            break
+        usenet(dbcollection)
+
+        # print('Almost done, re-indexing database...')
+        # db.command({"reIndex": "docs"})
