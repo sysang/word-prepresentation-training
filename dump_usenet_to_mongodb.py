@@ -23,7 +23,7 @@ def verify_line(regexes, str):
 class UsenetCorpus():
     def __init__(self, fname):
         self.fname = fname
-        self.regex_fname = re.compile(r'splits/\w\w$')
+        self.regex_fname = re.compile(r'splits/\w\w\w$')
         self.verify_regexes = [
                 re.compile(r"\-\-\-END\.OF\.DOCUMENT\-\-\-", re.IGNORECASE),
                 re.compile(r"\<.*\>", re.IGNORECASE),
@@ -40,26 +40,21 @@ class UsenetCorpus():
         # f is an install of bz2.BZ2File class
         with tarfile.open(self.fname, mode='r:gz') as tar:
             for member in tar.getmembers():
-                print(member.name)
+                # print(member.name)
                 if self.regex_fname.match(member.name):
-                    print(member.name)
-                    member_bytes = tar.extractfile(member).read()
-                    member_text = member_bytes.decode('utf-8', errors='replace')
-                    if member_text.strip().replace("\n", "").replace("\r\n", "") and verify_line(self.verify_regexes, member_text.strip()):
-                        yield member_text
+                    member_text = tar.extractfile(member).readlines()
+                    for line in member_text:
+                        line = line.decode('utf-8', errors='replace')
+                        if line.strip().replace("\n", "").replace("\r\n", "") and verify_line(self.verify_regexes, line.strip()):
+                            yield line
 
 
 def usenet(dbcollection):
     fname = "/archives/corpus/usenet_westburylab.splits.tar.gz"
 
-    count = 0
     corpus = UsenetCorpus(fname)
-    for doc in corpus:
-        count += 1
-        if count % 100000 == 0:
-            print("Document counting: %d" % (count))
 
-    # extract_documents(dbcollection, corpus=corpus)
+    extract_documents(dbcollection, corpus=corpus)
 
 
 if __name__ == "__main__":
@@ -69,5 +64,5 @@ if __name__ == "__main__":
 
         usenet(dbcollection)
 
-        # print('Almost done, re-indexing database...')
-        # db.command({"reIndex": "docs"})
+        print('Almost done, re-indexing database...')
+        db.command({"reIndex": "docs"})

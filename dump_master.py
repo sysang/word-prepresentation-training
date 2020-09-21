@@ -43,7 +43,7 @@ def recursively_replace(__regex, repl, str):
 
 def extract_documents(dbcollection, regex_fname=None, fname=None, corpus=None, extrax_regexes=[]):
     # regexes for single sentence
-    regex = re.compile(r"\(|\)|\<|\>|\{|\}|\_|\.|\,|\-{2,}|(^|\s)\-\s|\;|\:|\*|\#+|\~|\[|\]|\\|\"|”|\=|\+|\\x85|\\x91|\\x96|urllink|nbsp|andnbsp|�+|\:\-\)", re.IGNORECASE)
+    regex = re.compile(r"\(|\)|\<|\>|\{|\}|\_|\.|\,|\-{2,}|(^|\s)\-\s|\;|\:|\*+|\#+|\~|\[|\]|\\|\"|\\\"|”|\=|\+|\\x85|\\x91|\\x96|urllink|nbsp|andnbsp|�+|\:\-\)", re.IGNORECASE)
     regex_special_expression = re.compile("LOL(.)*|<.+>", re.IGNORECASE)
     regex_prime = re.compile(r"(^|\s)(\w+)(\'s|\'d)", re.IGNORECASE)
     regex_dash = re.compile(r"(^|\s)(\w+)(\-\s)", re.IGNORECASE)
@@ -75,7 +75,7 @@ def extract_documents(dbcollection, regex_fname=None, fname=None, corpus=None, e
                 member_text.lower()
                 .replace('<br />', ' ').replace('<br/>', ' ')
                 .replace('?', '. ').replace('!', '. ').replace('...', '. ')
-                .replace("\\", " ").replace(" / ", " ").replace(" ' ", " ")
+                .replace('\"', " ").replace(" / ", " ").replace(" ' ", " ")
                 .replace('&', 'and').replace("'n'", " and ").replace(" 'n ", " and ")
                 .replace("isn't", "is not").replace("'m", " am")
                 .replace("aren't", "are not").replace("'re", " are").replace("ain't", "are not")
@@ -133,8 +133,7 @@ def extract_documents(dbcollection, regex_fname=None, fname=None, corpus=None, e
                     print('-----------  BATCH INDEX: %s' % (batch_index) + '  --------------')
 
                 if bulk_vol >= 5000:
-                    # print(doc['text'])
-                    # dbcollection.insert_many(docs)
+                    dbcollection.insert_many(docs)
                     time.sleep(1)
                     docs.clear()
                     bulk_vol = 0
