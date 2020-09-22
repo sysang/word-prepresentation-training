@@ -27,7 +27,12 @@ def gutenberg(dbcollection):
             ]
 
     for fname in fnames:
-        extract_documents(fname, dbcollection, regex_fname, extrax_regexes)
+        extract_documents(
+                dbcollection=dbcollection,
+                regex_fname=regex_fname,
+                fname=fname,
+                extrax_regexes=extrax_regexes
+                )
 
 
 if __name__ == "__main__":

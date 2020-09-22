@@ -41,7 +41,7 @@ def recursively_replace(__regex, repl, str):
     return str
 
 
-def extract_documents(dbcollection, regex_fname=None, fname=None, corpus=None, extrax_regexes=[]):
+def extract_documents(dbcollection, corpus=None, fname=None, regex_fname=None, extrax_regexes=[]):
     # regexes for single sentence
     regex = re.compile(r"\(|\)|\<|\>|\{|\}|\_|\.|\,|\-{2,}|(^|\s)\-\s|\;|\:|\*+|\#+|\~|\[|\]|\\|\"|\\\"|”|\=|\+|\\x85|\\x91|\\x96|urllink|nbsp|andnbsp|�+|\:\-\)", re.IGNORECASE)
     regex_special_expression = re.compile("LOL(.)*|<.+>", re.IGNORECASE)

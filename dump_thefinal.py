@@ -9,8 +9,6 @@ if __name__ == "__main__":
         db = client.thefinal
         dbcollection = db.docs
 
-        dbcollection.delete_many({})
-
         gutenberg(dbcollection)
         imdb(dbcollection)
         enwik9(dbcollection)
