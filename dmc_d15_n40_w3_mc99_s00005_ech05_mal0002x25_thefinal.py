@@ -28,7 +28,6 @@ if __name__ == '__main__':
 2020-09-22 08:52:57,143 : INFO : deleting the raw counts dictionary of 1784839 items
 2020-09-22 08:52:57,180 : INFO : sample=5e-05 downsamples 733 most-common words
 2020-09-22 08:52:57,180 : INFO : downsampling leaves estimated 147142569 word corpus (44.8% of prior 328657804)
-2020-09-22 08:52:57,289 : INFO : estimated required memory for 61077 words and 15 dimensions: 857255460 bytes
 *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 
 

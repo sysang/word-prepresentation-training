@@ -148,6 +148,10 @@ def opt_collection(client):
     if not database:
         raise Exception("No mongodb database specified")
 
+    if database == 'elephant':
+        db = client.elephant
+        return db.docs
+
     if database == 'thefinal':
         db = client.thefinal
         return db.docs
@@ -340,7 +344,7 @@ def train(common_kwargs, saved_fname, evaluate=False):
     print("Are inferred vectors close to the precalculated ones?")
     print("-----------------------------------------------------")
 
-    topn = 100
+    topn = 1000
     for ind in range(0, 7):
         random_index, random_doc = mycorpus.get_random_doc()
         print('[+] index %s -> "%s"' % (random_index, random_doc))
