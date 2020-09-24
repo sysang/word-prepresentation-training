@@ -148,8 +148,8 @@ def opt_collection(client):
     if not database:
         raise Exception("No mongodb database specified")
 
-    if database == 'elephant':
-        db = client.elephant
+    if database == 'refined':
+        db = client.refined
         return db.docs
 
     if database == 'thefinal':
@@ -297,7 +297,7 @@ def train(common_kwargs, saved_fname, evaluate=False):
             model.train(mycorpus, total_examples=mycorpus.total_count, epochs=model.epochs)
 
             print("\n")
-            print('\t\t\t\t\t *** TRAINING HAS COMPLETED. ***')
+            print('\t\t\t\t * FINISHED TRAINING *')
     else:
         simple_models = [
             # PV-DM w/ concatenation - big, slow, experimental mode
@@ -317,7 +317,7 @@ def train(common_kwargs, saved_fname, evaluate=False):
     print("\n")
     print("*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*")
     print("\n")
-    print('EXAMINING RESULTS')
+    print('\tEXAMINING THE MODEL')
     print("\n")
     print("*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*")
 
@@ -344,7 +344,7 @@ def train(common_kwargs, saved_fname, evaluate=False):
     print("Are inferred vectors close to the precalculated ones?")
     print("-----------------------------------------------------")
 
-    topn = 1000
+    topn = 200
     for ind in range(0, 7):
         random_index, random_doc = mycorpus.get_random_doc()
         print('[+] index %s -> "%s"' % (random_index, random_doc))
@@ -387,7 +387,7 @@ def train(common_kwargs, saved_fname, evaluate=False):
     print("Do the word vectors show useful similarities?")
     print("-----------------------------------------------------")
 
-    for ind in range(0, 5):
+    for ind in range(0, 7):
         target_word = pick_random_word(simple_models[0])
         for model in simple_models:
             print('[+] target_word: %r model: %s:' % (target_word, model))

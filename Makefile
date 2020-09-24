@@ -20,7 +20,7 @@ dump_usenet:
 	python3 dump_usenet_to_mongodb.py
 
 train:
-	python3 $(file) --check-dataset=0 --database=elephant
+	python3 $(file) --check-dataset=0 --database=refined
 
 check_dataset:
 	python3 dmc_d15_n18_w2_mc60_s0001_ech05_thefinal.py --check-dataset=1 --database=enwik8

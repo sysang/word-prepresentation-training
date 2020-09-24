@@ -1,4 +1,3 @@
-from pymongo import MongoClient
 import tarfile
 import re
 import math
@@ -80,10 +79,10 @@ def extract_documents(dbcollection, corpus=None, fname=None, regex_fname=None, e
                 .replace("isn't", "is not").replace("'m", " am")
                 .replace("aren't", "are not").replace("'re", " are").replace("ain't", "are not")
                 .replace("aren�t", " are not").replace("�re", " are").replace("weren�t", " were not")
-                .replace("doesn't", "does not").replace("dosen't", "does not").replace("doesnt", "does not").replace("doesn`t", "does not") 
+                .replace("doesn't", "does not").replace("dosen't", "does not").replace("doesnt", "does not").replace("doesn`t", "does not")
                 .replace("don't", "do not").replace("don`t", "do not").replace("don´t", "do not").replace("dont", "do not")
                 .replace("didn't", "did not").replace("didn´t", "did not") .replace("did'nt", "did not").replace("didn´t", "did not")
-                .replace("didn´t", "did not").replace("did't", "did not").replace("didn`t", "did not").replace("didnt", "did not") 
+                .replace("didn´t", "did not").replace("did't", "did not").replace("didn`t", "did not").replace("didnt", "did not")
                 .replace("wasn't", "was not").replace("weren't", "were not") .replace("wasn´t", "was not")
                 .replace("wasnt", "was not").replace("werent", "were not") .replace("wasnt", "was not")
                 .replace("haven't", "have not").replace("hasn't", "has not").replace("hasn�t", "has not")
@@ -132,7 +131,7 @@ def extract_documents(dbcollection, corpus=None, fname=None, regex_fname=None, e
                     print("\n")
                     print('-----------  BATCH INDEX: %s' % (batch_index) + '  --------------')
 
-                if bulk_vol >= 5000:
+                if bulk_vol >= 10000:
                     dbcollection.insert_many(docs)
                     time.sleep(0.1)
                     docs.clear()
