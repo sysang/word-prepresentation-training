@@ -152,6 +152,11 @@ def opt_collection(client):
         db = client.refined
         return db.docs
 
+    # refined
+    if database == 'blogwikgutimdb':
+        db = client.blogwikgutimdb
+        return db.docs
+
     if database == 'thefinal':
         db = client.thefinal
         return db.docs
@@ -402,23 +407,18 @@ def train(common_kwargs, saved_fname, evaluate=False):
     print("-----------------------------------------------------")
     print("Are the word vectors from this dataset any good at analogies?")
     print("-----------------------------------------------------")
+    print("\n")
 
     # grab the file if not already local
-    questions_filename = 'questions-words.txt'
-    if not os.path.isfile(questions_filename):
-        # Download IMDB archive
-        print("Downloading analogy questions file...")
-        url = u'https://raw.githubusercontent.com/tmikolov/word2vec/master/questions-words.txt'
-        with smart_open.open(url, 'rb') as fin:
-            with smart_open.open(questions_filename, 'wb') as fout:
-                fout.write(fin.read())
-    assert os.path.isfile(questions_filename), "questions-words.txt unavailable"
-
-    # Note: this analysis takes many minutes
-    for model in simple_models:
-        score, sections = model.wv.evaluate_word_analogies('questions-words.txt')
-        correct, incorrect = len(sections[-1]['correct']), len(sections[-1]['incorrect'])
-        print('%s: %0.2f%% correct (%d of %d)' % (model, float(correct*100)/(correct+incorrect), correct, correct+incorrect))
+    questions_filenames = ['questions-words.txt', 'questions-words-narrowed.txt']
+    for questions_filename in questions_filenames:
+        # Note: this analysis takes many minutes
+        print("[+] " + questions_filename)
+        for model in simple_models:
+            score, sections = model.wv.evaluate_word_analogies(questions_filename)
+            correct, incorrect = len(sections[-1]['correct']), len(sections[-1]['incorrect'])
+            print('%s: %0.2f%% correct (%d of %d)' % (model, float(correct*100)/(correct+incorrect), correct, correct+incorrect))
+            print("\n")
 
     # Benchmark against analogies metric baseline
     # -------------------------------------------------------------

@@ -79,9 +79,10 @@ def db_refine(from_db, to_db, from_collection='docs', to_collection='docs'):
 
 
 if __name__ == '__main__':
+    raise Exception("Check configuration again!!!")
     db_refine(
-            from_db='elephant',
+            from_db='thefinal',
             from_collection='docs',
-            to_db='refined',
+            to_db='blogwikgutimdb',
             to_collection='docs'
             )
