@@ -269,7 +269,11 @@ def sanity_check_datasource(mycorpus):
         raise error
 
 
-def train(common_kwargs, saved_fname, evaluate=False):
+def train(common_kwargs, saved_fname, database, evaluate=False):
+    database = args.database
+    if database != args.database:
+        raise "Database settings are mismatched!"
+
     queue_buffers = []
     buffer_size_status = []
     buffer_emptiness_status = []
@@ -302,7 +306,10 @@ def train(common_kwargs, saved_fname, evaluate=False):
             model.train(mycorpus, total_examples=mycorpus.total_count, epochs=model.epochs)
 
             print("\n")
-            print('\t\t\t\t * FINISHED TRAINING *')
+            print('----------------------------------')
+            print('<TRAINING> *')
+            print('<CORPUS ITERATOR> End of dataset.')
+            print("----------------------------------")
     else:
         simple_models = [
             # PV-DM w/ concatenation - big, slow, experimental mode

@@ -12,7 +12,8 @@ if __name__ == '__main__':
         hs=0,
         epochs=5,
         min_alpha=0.0002,
-        alpha=0.0002*20*5
+        alpha=0.0002*20*5,
+        comment='ech05,mal0002x20',
     )
 
     saved_fname = 'models/' + __file__.replace('.py', '.bin')
