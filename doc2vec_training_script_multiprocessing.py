@@ -307,8 +307,7 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
 
             print("\n")
             print('----------------------------------')
-            print('<TRAINING> *')
-            print('<CORPUS ITERATOR> End of dataset.')
+            print('<FINISHED TRAINING>')
             print("----------------------------------")
     else:
         simple_models = [
@@ -459,6 +458,6 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
         print(result)
 
     print("\n")
-    print("             ____________     COMPLETED          ___________________________      ")
+    print("     ____________     COMPLETED      ___________________________      ")
     print("#~~~~~~~~###~~~~~~~~~~~~##~~~~~~~~~~~#~~~~~~~~~~~~~~~##~~~~~~~~~~~~###~~~~~~~~~~~~~#")
     print("\n")
