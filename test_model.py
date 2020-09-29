@@ -6,7 +6,7 @@ import re
 import numpy as np
 from gensim.models import Doc2Vec
 
-EPOCHS = 300
+EPOCHS = 100
 
 
 def verify_infering_vector(_model, epochs=5, example=None):
@@ -59,8 +59,14 @@ def assess_the_rational_inference(model_fpath):
     model = Doc2Vec.load(model_fpath)
 
     with open('sentence_semantics_queries.csv', newline='') as f:
+
         rows = csv.reader(f, delimiter=';', quotechar='|')
+
+        is_pass = True
+        score = 0
+        count = 0
         for row in rows:
+            count += 1
             query = row[0]
             target = row[1]
             theme = row[2]
@@ -73,10 +79,18 @@ def assess_the_rational_inference(model_fpath):
                 )
             if threshold > 0:
                 is_good = '[*]' if sim > threshold else ' ~ '
+                is_pass = is_pass & (sim > threshold)
+                score += 1 if sim > threshold else 0
             else:
                 is_good = '[*]' if sim < abs(threshold) else ' ~ '
+                is_pass = is_pass & (sim < abs(threshold))
+                score += 1 if sim < abs(threshold) else 0
 
             print("%s %s - %s, distance score: %f, with respect to theme: %s" % (is_good, query, target, sim, theme))
+
+        print('<SCORE>: %05.2f' % (100 * score / count))
+        if is_pass:
+            print('*** PASSED **************************')
 
 
 def assess_all_model():
@@ -88,6 +102,6 @@ def assess_all_model():
 
 
 if __name__ == "__main__":
-
     # verify_infering_vector(model, EPOCHS)
+
     assess_all_model()
