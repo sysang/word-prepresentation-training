@@ -6,7 +6,7 @@ import re
 import numpy as np
 from gensim.models import Doc2Vec
 
-EPOCHS = 250
+EPOCHS = 300
 
 
 def verify_infering_vector(_model, epochs=5, example=None):
@@ -50,11 +50,13 @@ def semantic_comparision(model, query, target, theme):
     return sim
 
 
-def assess_the_rational_inference(model):
+def assess_the_rational_inference(model_fpath):
     print("\n")
     print("--------------------------------------------------------------------")
-    print('<FILE>: %s' % str(model))
+    print('<FILE>: %s' % str(model_fpath))
     print("--------------------------------------------------------------------")
+
+    model = Doc2Vec.load(model_fpath)
 
     with open('sentence_semantics_queries.csv', newline='') as f:
         rows = csv.reader(f, delimiter=';', quotechar='|')
@@ -70,9 +72,9 @@ def assess_the_rational_inference(model):
                     theme=theme
                 )
             if threshold > 0:
-                is_good = '[*]' if sim > threshold else '__'
+                is_good = '[*]' if sim > threshold else ' ~ '
             else:
-                is_good = '[*]' if sim < threshold else '__'
+                is_good = '[*]' if sim < abs(threshold) else ' ~ '
 
             print("%s %s - %s, distance score: %f, with respect to theme: %s" % (is_good, query, target, sim, theme))
 
@@ -82,12 +84,10 @@ def assess_all_model():
     for f in os.listdir(dirpath):
         if re.match(r".+\.bin$", f):
             model_fpath = dirpath + f
-            model = Doc2Vec.load(model_fpath)
-            assess_the_rational_inference(model)
+            assess_the_rational_inference(model_fpath)
 
 
 if __name__ == "__main__":
 
     # verify_infering_vector(model, EPOCHS)
-
     assess_all_model()
