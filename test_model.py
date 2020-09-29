@@ -6,6 +6,7 @@ import re
 import numpy as np
 from gensim.models import Doc2Vec
 
+# NOTES: epochs = 100, the value results in good result
 EPOCHS = 100
 
 
@@ -50,10 +51,10 @@ def semantic_comparision(model, query, target, theme):
     return sim
 
 
-def assess_the_rational_inference(model_fpath):
+def assess_the_rational_inference(model_fpath, order):
     print("\n")
     print("--------------------------------------------------------------------")
-    print('<FILE>: %s' % str(model_fpath))
+    print('<FILE %d>: %s' % (order, str(model_fpath)))
     print("--------------------------------------------------------------------")
 
     model = Doc2Vec.load(model_fpath)
@@ -94,11 +95,13 @@ def assess_the_rational_inference(model_fpath):
 
 
 def assess_all_model():
+    order = 1
     dirpath = 'models/'
     for f in os.listdir(dirpath):
         if re.match(r".+\.bin$", f):
             model_fpath = dirpath + f
-            assess_the_rational_inference(model_fpath)
+            assess_the_rational_inference(model_fpath, order)
+            order += 1
 
 
 if __name__ == "__main__":
