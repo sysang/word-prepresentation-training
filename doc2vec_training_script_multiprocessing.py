@@ -358,7 +358,7 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
     topn = 200
     for ind in range(0, 7):
         random_index, random_doc = mycorpus.get_random_doc()
-        print('[+] index %s -> "%s"' % (random_index, random_doc))
+        print('-> index %s --> "%s"' % (random_index, random_doc))
         for model in simple_models:
             inferred_docvec = model.infer_vector(random_doc.split(' '))
             similarities = model.docvecs.most_similar([inferred_docvec], topn=topn)
