@@ -40,10 +40,10 @@ def magniture_on(query, target):
     return np.sum(query * target)/np.linalg.norm(target)
 
 
-def semantic_comparision(model, query, target, theme):
-    query_vector = model.infer_vector(query.split(' '), epochs=EPOCHS)
-    target_vector = model.infer_vector(target.split(' '), epochs=EPOCHS)
-    theme_vector = model.infer_vector([theme], epochs=EPOCHS)
+def semantic_comparision(model, epochs, query, target, theme):
+    query_vector = model.infer_vector(query.split(' '), epochs=epochs)
+    target_vector = model.infer_vector(target.split(' '), epochs=epochs)
+    theme_vector = model.infer_vector([theme], epochs=epochs)
     query_mag_on_theme = magniture_on(query_vector, theme_vector)
     target_mag_on_theme = magniture_on(target_vector, theme_vector)
     sim = abs(target_mag_on_theme - query_mag_on_theme) / np.linalg.norm(theme_vector)
@@ -59,39 +59,45 @@ def assess_the_rational_inference(model_fpath, order):
 
     model = Doc2Vec.load(model_fpath)
 
-    with open('sentence_semantics_queries.csv', newline='') as f:
+    for epochs in [10, 20, 50, 100, 200]:
 
-        rows = csv.reader(f, delimiter=';', quotechar='|')
+        print("\n")
+        print('<EPOCHS:> %d' % (epochs))
 
-        is_pass = True
-        score = 0
-        count = 0
-        for row in rows:
-            count += 1
-            query = row[0]
-            target = row[1]
-            theme = row[2]
-            threshold = float(row[3])
-            sim = semantic_comparision(
-                    model=model,
-                    query=query,
-                    target=target,
-                    theme=theme
-                )
-            if threshold > 0:
-                is_good = '[*]' if sim > threshold else ' ~ '
-                is_pass = is_pass & (sim > threshold)
-                score += 1 if sim > threshold else 0
-            else:
-                is_good = '[*]' if sim < abs(threshold) else ' ~ '
-                is_pass = is_pass & (sim < abs(threshold))
-                score += 1 if sim < abs(threshold) else 0
+        with open('sentence_semantics_queries.csv', newline='') as f:
 
-            print("%s %s - %s, distance score: %f, with respect to theme: %s" % (is_good, query, target, sim, theme))
+            rows = csv.reader(f, delimiter=';', quotechar='|')
 
-        print('<SCORE>: %05.2f' % (100 * score / count))
-        if is_pass:
-            print('*** PASSED **************************')
+            is_pass = True
+            score = 0
+            count = 0
+            for row in rows:
+                count += 1
+                query = row[0]
+                target = row[1]
+                theme = row[2]
+                threshold = float(row[3])
+                sim = semantic_comparision(
+                        model=model,
+                        epochs=epochs,
+                        query=query,
+                        target=target,
+                        theme=theme
+                    )
+                if threshold > 0:
+                    is_good = '[*]' if sim > threshold else ' ~ '
+                    is_pass = is_pass & (sim > threshold)
+                    score += 1 if sim > threshold else 0
+                else:
+                    is_good = '[*]' if sim < abs(threshold) else ' ~ '
+                    is_pass = is_pass & (sim < abs(threshold))
+                    score += 1 if sim < abs(threshold) else 0
+
+                print("%s %s - %s, distance score: %f, with respect to theme: %s" % (is_good, query, target, sim, theme))
+
+            print('<SCORE>: %05.2f' % (100 * score / count))
+            if is_pass:
+                print('* *** *  << PASSED >> * *** *')
 
 
 def assess_all_model():
