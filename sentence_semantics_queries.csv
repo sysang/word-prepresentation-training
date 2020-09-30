@@ -8,5 +8,5 @@ girl;boy;gender;+0.5
 girl;boy;young;-0.5
 son;daughter;boy;+0.5
 son;daughter;children;-0.5
-ocean;mountain;nature;-0.5
-ocean;mountain;water;+0.5
+sea;mountain;nature;-0.5
+sea;mountain;climbing;+0.5

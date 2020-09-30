@@ -1,14 +1,13 @@
 # coding: utf-8
 import math
-import os
 import collections
 import argparse
 import time
+import csv
 
 from gensim.models.doc2vec import Doc2Vec
 import numpy as np
 
-import smart_open
 from pymongo import MongoClient
 
 from multiprocessing import Process, Value, Queue
@@ -78,6 +77,21 @@ class CorpusRpcClient(object):
             self.connection.process_data_events()
 
         return self.response
+
+
+def magniture_on(query, target):
+    return np.sum(query * target)/np.linalg.norm(target)
+
+
+def semantic_comparision(model, epochs, query, target, theme):
+    query_vector = model.infer_vector(query.split(' '), epochs=epochs)
+    target_vector = model.infer_vector(target.split(' '), epochs=epochs)
+    theme_vector = model.infer_vector([theme], epochs=epochs)
+    query_mag_on_theme = magniture_on(query_vector, theme_vector)
+    target_mag_on_theme = magniture_on(target_vector, theme_vector)
+    sim = abs(target_mag_on_theme - query_mag_on_theme) / np.linalg.norm(theme_vector)
+
+    return sim
 
 
 class MyCorpus(object):
@@ -292,29 +306,20 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
     if args.check_dataset:
         sanity_check_datasource(mycorpus)
 
-    simple_models = [
-        # PV-DM w/ concatenation - big, slow, experimental mode
-        # window=5 (both sides) approximates paper's apparent 10-word total window size
-        Doc2Vec(workers=6, queue_factor=4, **common_kwargs),
-    ]
+    model = Doc2Vec(workers=6, queue_factor=4, **common_kwargs)
 
     if not evaluate:
-        for model in simple_models:
-            model.build_vocab(mycorpus)
-            print("%s vocabulary scanned & state initialized" % model)
+        model.build_vocab(mycorpus)
+        print("%s vocabulary scanned & state initialized" % model)
 
-            model.train(mycorpus, total_examples=mycorpus.total_count, epochs=model.epochs)
+        model.train(mycorpus, total_examples=mycorpus.total_count, epochs=model.epochs)
 
-            print("\n")
-            print('----------------------------------')
-            print('<FINISHED TRAINING>')
-            print("----------------------------------")
+        print("\n")
+        print('----------------------------------')
+        print('<FINISHED TRAINING>')
+        print("----------------------------------")
     else:
-        simple_models = [
-            # PV-DM w/ concatenation - big, slow, experimental mode
-            # window=5 (both sides) approximates paper's apparent 10-word total window size
-            Doc2Vec.load(saved_fname),
-        ]
+        model = Doc2Vec.load(saved_fname)
 
     # EXAMINING RESULTS
     #
@@ -334,16 +339,12 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
 
     # Store model
     # -------------------------------------------------------------
-    count = len(simple_models)
-    ind = 0
-    for model in simple_models:
-        ind += 1
-        save_to = saved_fname + (str(ind) if count > 1 else '')
-        print("\n")
-        print("Model details: " + str(model))
-        print("Save model to: " + save_to)
+    print("\n")
+    print("INFO: Training parameters: " + str(common_kwargs))
+    print("INFO: Model details: " + str(model))
+    print("INFO: Save model to: " + saved_fname)
 
-        model.save(save_to)
+    model.save(saved_fname)
 
     # Terminate data buffering process
     multi_process.terminate()
@@ -359,19 +360,19 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
     for ind in range(0, 7):
         random_index, random_doc = mycorpus.get_random_doc()
         print('-> index %s --> "%s"' % (random_index, random_doc))
-        for model in simple_models:
-            inferred_docvec = model.infer_vector(random_doc.split(' '))
-            similarities = model.docvecs.most_similar([inferred_docvec], topn=topn)
-            rank = 1
-            for (index, score) in similarities:
-                if index == random_index:
-                    print('[*] Matched with rank %s, score: %s!' % (rank, score))
-                    print("\n")
-                    break
-                rank += 1
-            if rank == topn + 1:
-                print("    No any match in top %s similarities." % (topn))
+
+        inferred_docvec = model.infer_vector(random_doc.split(' '))
+        similarities = model.docvecs.most_similar([inferred_docvec], topn=topn)
+        rank = 1
+        for (index, score) in similarities:
+            if index == random_index:
+                print('[*] Matched with rank %s, score: %s!' % (rank, score))
                 print("\n")
+                break
+            rank += 1
+        if rank == topn + 1:
+            print("    No any match in top %s similarities." % (topn))
+            print("\n")
 
     # Do close documents seem more related than distant ones?
     # -------------------------------------------------------
@@ -380,8 +381,7 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
     print("Do close documents seem more related than distant ones?")
     print("-----------------------------------------------------")
 
-    doc_id = np.random.randint(simple_models[0].docvecs.count)  # pick random doc, re-run cell for more examples
-    model = simple_models[0]
+    doc_id = np.random.randint(model.docvecs.count)  # pick random doc, re-run cell for more examples
     sims = model.docvecs.most_similar(doc_id, topn=model.docvecs.count)  # get *all* similar documents
     print(u'TARGET (%d): %s\n' % (doc_id, mycorpus.get_doc_by_index(doc_id)))
     print(u'SIMILAR/DISSIMILAR DOCS PER MODEL %s:\n' % (str(model)))
@@ -399,12 +399,11 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
     print("-----------------------------------------------------")
 
     for ind in range(0, 7):
-        target_word = pick_random_word(simple_models[0])
-        for model in simple_models:
-            print('[+] target_word: %r model: %s:' % (target_word, model))
-            for i, (word, sim) in enumerate(model.wv.most_similar(target_word, topn=7), 1):
-                print('     %d. %.2f %r' % (i, sim, word))
-            print("\n")
+        target_word = pick_random_word(model)
+        print('[+] target_word: %r model: %s:' % (target_word, model))
+        for i, (word, sim) in enumerate(model.wv.most_similar(target_word, topn=7), 1):
+            print('     %d. %.2f %r' % (i, sim, word))
+        print("\n")
 
     # Are the word vectors from this dataset any good at analogies?
     # -------------------------------------------------------------
@@ -420,11 +419,10 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
     for questions_filename in questions_filenames:
         # Note: this analysis takes many minutes
         print("[+] " + questions_filename)
-        for model in simple_models:
-            score, sections = model.wv.evaluate_word_analogies(questions_filename)
-            correct, incorrect = len(sections[-1]['correct']), len(sections[-1]['incorrect'])
-            print('%s: %0.2f%% correct (%d of %d)' % (model, float(correct*100)/(correct+incorrect), correct, correct+incorrect))
-            print("\n")
+        score, sections = model.wv.evaluate_word_analogies(questions_filename)
+        correct, incorrect = len(sections[-1]['correct']), len(sections[-1]['incorrect'])
+        print('%s: %0.2f%% correct (%d of %d)' % (model, float(correct*100)/(correct+incorrect), correct, correct+incorrect))
+        print("\n")
 
     # Benchmark against analogies metric baseline
     # -------------------------------------------------------------
@@ -437,25 +435,63 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
     print("\n")
     print("01 - wordsim353")
 
-    for model in simple_models:
-        result = model.wv.evaluate_word_pairs('wordsim353.tsv')
-        print(result)
+    result = model.wv.evaluate_word_pairs('wordsim353.tsv')
+    print(result)
 
     # 02 - simlex999
     print("\n")
     print("02 - simlex999")
 
-    for model in simple_models:
-        result = model.wv.evaluate_word_pairs('simlex999.txt')
-        print(result)
+    result = model.wv.evaluate_word_pairs('simlex999.txt')
+    print(result)
 
     # 03 - simverb3500
     print("\n")
     print("03 - simverb3500")
 
-    for model in simple_models:
-        result = model.wv.evaluate_word_pairs('simverb3500_DGerz.txt')
-        print(result)
+    result = model.wv.evaluate_word_pairs('simverb3500_DGerz.txt')
+    print(result)
+
+    print("\n")
+    print("-----------------------------------------------------")
+    print("Benchmark similarity score with respect to theme word")
+    print("-----------------------------------------------------")
+    print("\n")
+
+    for epochs in [10, 20, 50, 100, 200]:
+        with open('sentence_semantics_queries.csv', newline='') as f:
+
+            rows = csv.reader(f, delimiter=';', quotechar='|')
+
+            is_pass = True
+            score = 0
+            count = 0
+            for row in rows:
+                count += 1
+                query = row[0]
+                target = row[1]
+                theme = row[2]
+                threshold = float(row[3])
+                sim = semantic_comparision(
+                        model=model,
+                        epochs=epochs,
+                        query=query,
+                        target=target,
+                        theme=theme
+                    )
+                if threshold > 0:
+                    is_good = '[*]' if sim > threshold else ' ~ '
+                    is_pass = is_pass & (sim > threshold)
+                    score += 1 if sim > threshold else 0
+                else:
+                    is_good = '[*]' if sim < abs(threshold) else ' ~ '
+                    is_pass = is_pass & (sim < abs(threshold))
+                    score += 1 if sim < abs(threshold) else 0
+
+                print("%s %s - %s, distance score: %f, with respect to theme: %s" % (is_good, query, target, sim, theme))
+
+            print('<EPOCHS>: %d - <SCORE>: %05.2f' % (epochs, 100 * score / count))
+            print('\n')
 
     print("\n")
     print("     ____________     COMPLETED      ___________________________      ")
