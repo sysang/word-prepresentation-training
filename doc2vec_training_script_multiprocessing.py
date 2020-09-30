@@ -17,6 +17,8 @@ import pika
 import uuid
 import pickle
 
+from doc2vec_service import query_semantic_distance
+
 import logging
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
@@ -77,21 +79,6 @@ class CorpusRpcClient(object):
             self.connection.process_data_events()
 
         return self.response
-
-
-def magniture_on(query, target):
-    return np.sum(query * target)/np.linalg.norm(target)
-
-
-def semantic_comparision(model, epochs, query, target, theme):
-    query_vector = model.infer_vector(query.split(' '), epochs=epochs)
-    target_vector = model.infer_vector(target.split(' '), epochs=epochs)
-    theme_vector = model.infer_vector([theme], epochs=epochs)
-    query_mag_on_theme = magniture_on(query_vector, theme_vector)
-    target_mag_on_theme = magniture_on(target_vector, theme_vector)
-    sim = abs(target_mag_on_theme - query_mag_on_theme) / np.linalg.norm(theme_vector)
-
-    return sim
 
 
 class MyCorpus(object):
@@ -463,7 +450,6 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
 
             rows = csv.reader(f, delimiter=';', quotechar='|')
 
-            is_pass = True
             score = 0
             count = 0
             for row in rows:
@@ -471,26 +457,26 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
                 query = row[0]
                 target = row[1]
                 theme = row[2]
-                threshold = float(row[3])
-                sim = semantic_comparision(
+                direction = float(row[3])
+                distance = query_semantic_distance(
                         model=model,
-                        epochs=epochs,
                         query=query,
                         target=target,
-                        theme=theme
+                        theme=theme,
+                        epochs=epochs,
                     )
+
+                threshold = abs(direction)
                 if threshold > 0:
-                    is_good = '[*]' if sim > threshold else ' ~ '
-                    is_pass = is_pass & (sim > threshold)
+                    is_good = '[*]' if distance > threshold else ' ~ '
                     score += 1 if sim > threshold else 0
                 else:
-                    is_good = '[*]' if sim < abs(threshold) else ' ~ '
-                    is_pass = is_pass & (sim < abs(threshold))
-                    score += 1 if sim < abs(threshold) else 0
+                    is_good = '[*]' if distance < threshold else ' ~ '
+                    score += 1 if distance < threshold else 0
 
                 print("%s %s - %s, distance score: %f, with respect to theme: %s" % (is_good, query, target, sim, theme))
 
-            print('<EPOCHS>: %d - <SCORE>: %05.2f' % (epochs, 100 * score / count))
+            print('<EPOCHS>: %d - SCORE=%05.2f' % (epochs, 100 * score / count))
             print('\n')
 
     print("\n")

@@ -1,12 +1,41 @@
-a beautiful girl;a pretty girl;beautiful;-0.5
-a beautiful girl;a pretty woman;female;-0.5
-a beautiful girl;a ugly girl;beautiful;+0.5
-a new car;an old car;car;-0.5
-a new car;an old car;new;+0.5
-a new car;an huge car;car;-0.5
-girl;boy;gender;+0.5
-girl;boy;young;-0.5
-son;daughter;boy;+0.5
-son;daughter;children;-0.5
-sea;mountain;nature;-0.5
-sea;mountain;climbing;+0.5
+a beautiful girl;a pretty girl;beautiful;-0.35
+a beautiful girl;a pretty woman;female;-0.35
+a beautiful girl;a ugly girl;beautiful;+0.35
+a new car;an old car;car;-0.35
+a new car;an old car;new;+0.35
+a new car;an huge car;car;-0.35
+girl;boy;gender;+0.35
+girl;boy;young;-0.35
+girl;woman;gender;-0.35
+man;woman;gender;+0.35
+boy;man;gender;-0.35
+girl;man;gender;+0.35
+boy;woman;gender;+0.35
+son;daughter;boy;+0.35
+son;daughter;children;-0.35
+sea;mountain;nature;-0.35
+forest;mountain;nature;-0.35
+sea;house;nature;+0.35
+sea;software;nature;+0.35
+house;software;nature;-0.35
+sea;mountain;climbing;+0.35
+sea;river;climbing;-0.35
+human;dog;mammal;-0.35
+human;fish;mammal;+0.35
+dog;fish;mammal;+0.35
+bird;fish;mammal;-0.35
+man;woman;human;-0.35
+man;elephant;human;+0.35
+woman;elephant;human;+0.35
+dog;elephant;human;-0.35
+dog;lion;pet;+0.35
+cat;lion;pet;+0.35
+cat;dot;pet;-0.35
+car;orange;food;+0.35
+car;apple;food;+0.35
+orange;apple;food;-0.35
+car;book;food;-0.35
+car;orange;vehicle;+0.35
+car;grapes;vehicle;+0.35
+car;motorbike;vehicle;-0.35
+orange;apple;vehicle;-0.35

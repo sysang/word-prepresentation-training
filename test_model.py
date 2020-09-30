@@ -6,6 +6,8 @@ import re
 import numpy as np
 from gensim.models import Doc2Vec
 
+from doc2vec_service import query_semantic_distance
+
 # NOTES: epochs = 100, the value results in good result
 EPOCHS = 100
 
@@ -36,21 +38,6 @@ def verify_infering_vector(_model, epochs=5, example=None):
     print('Average vector length: %f' % (length))
 
 
-def magniture_on(query, target):
-    return np.sum(query * target)/np.linalg.norm(target)
-
-
-def semantic_comparision(model, epochs, query, target, theme):
-    query_vector = model.infer_vector(query.split(' '), epochs=epochs)
-    target_vector = model.infer_vector(target.split(' '), epochs=epochs)
-    theme_vector = model.infer_vector([theme], epochs=epochs)
-    query_mag_on_theme = magniture_on(query_vector, theme_vector)
-    target_mag_on_theme = magniture_on(target_vector, theme_vector)
-    sim = abs(target_mag_on_theme - query_mag_on_theme) / np.linalg.norm(theme_vector)
-
-    return sim
-
-
 def assess_the_rational_inference(model_fpath, order):
     print("\n")
     print("--------------------------------------------------------------------")
@@ -61,43 +48,47 @@ def assess_the_rational_inference(model_fpath, order):
 
     for epochs in [10, 20, 50, 100, 200]:
 
-        print("\n")
-        print('<EPOCHS:> %d' % (epochs))
+        result = '\nEPOCHS=%d' % (epochs)
+        is_pass = True
+        score = 0
+        count = 0
 
         with open('sentence_semantics_queries.csv', newline='') as f:
 
             rows = csv.reader(f, delimiter=';', quotechar='|')
 
-            is_pass = True
-            score = 0
-            count = 0
             for row in rows:
                 count += 1
                 query = row[0]
                 target = row[1]
                 theme = row[2]
-                threshold = float(row[3])
-                sim = semantic_comparision(
+                direction = float(row[3])
+                distance = query_semantic_distance(
                         model=model,
-                        epochs=epochs,
                         query=query,
                         target=target,
-                        theme=theme
+                        theme=theme,
+                        epochs=epochs,
                     )
-                if threshold > 0:
-                    is_good = '[*]' if sim > threshold else ' ~ '
-                    is_pass = is_pass & (sim > threshold)
-                    score += 1 if sim > threshold else 0
+
+                # threshold = abs(direction)
+                threshold = 0.4
+                if direction > 0:
+                    is_good = '[*]' if distance > threshold else ' ~ '
+                    is_pass = is_pass & (distance > threshold)
+                    score += 1 if distance > threshold else 0
                 else:
-                    is_good = '[*]' if sim < abs(threshold) else ' ~ '
-                    is_pass = is_pass & (sim < abs(threshold))
-                    score += 1 if sim < abs(threshold) else 0
+                    is_good = '[*]' if distance < threshold else ' ~ '
+                    is_pass = is_pass & (distance < threshold)
+                    score += 1 if distance < threshold else 0
 
-                print("%s %s - %s, distance score: %f, with respect to theme: %s" % (is_good, query, target, sim, theme))
+                result += "\n%s %s - %s, distance score: %f, with respect to theme: %s" % (is_good, query, target, distance, theme)
 
-            print('<SCORE>: %05.2f' % (100 * score / count))
-            if is_pass:
-                print('* *** *  << PASSED >> * *** *')
+            score_percent = 100 * score / count
+            result += '\n<SCORE>: %05.2f' % (score_percent)
+            result += '\n* *** *  << PASSED >> * *** *' if is_pass else ''
+            if score_percent > 60:
+                print(result)
 
 
 def assess_all_model():
