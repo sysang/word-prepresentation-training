@@ -1,41 +1,50 @@
-a beautiful girl;a pretty girl;beautiful;-0.35
-a beautiful girl;a pretty woman;female;-0.35
-a beautiful girl;a ugly girl;beautiful;+0.35
-a new car;an old car;car;-0.35
-a new car;an old car;new;+0.35
-a new car;an huge car;car;-0.35
-girl;boy;gender;+0.35
-girl;boy;young;-0.35
-girl;woman;gender;-0.35
-man;woman;gender;+0.35
-boy;man;gender;-0.35
-girl;man;gender;+0.35
-boy;woman;gender;+0.35
-son;daughter;boy;+0.35
-son;daughter;children;-0.35
-sea;mountain;nature;-0.35
-forest;mountain;nature;-0.35
-sea;house;nature;+0.35
-sea;software;nature;+0.35
-house;software;nature;-0.35
-sea;mountain;climbing;+0.35
-sea;river;climbing;-0.35
-human;dog;mammal;-0.35
-human;fish;mammal;+0.35
-dog;fish;mammal;+0.35
-bird;fish;mammal;-0.35
-man;woman;human;-0.35
-man;elephant;human;+0.35
-woman;elephant;human;+0.35
-dog;elephant;human;-0.35
-dog;lion;pet;+0.35
-cat;lion;pet;+0.35
-cat;dot;pet;-0.35
-car;orange;food;+0.35
-car;apple;food;+0.35
-orange;apple;food;-0.35
-car;book;food;-0.35
-car;orange;vehicle;+0.35
-car;grapes;vehicle;+0.35
-car;motorbike;vehicle;-0.35
-orange;apple;vehicle;-0.35
+a beautiful girl;a pretty girl;beautiful;-1
+a beautiful girl;a pretty woman;female;-1
+a beautiful girl;a ugly girl;beautiful;+1
+a new car;an old car;car;-1
+a new car;an old car;new;+1
+a new car;an huge car;car;-1
+an old man;a young man;age;+1
+an old man;an young woman;age;+1
+an old woman;a young woman;age;+1
+an young man;a old woman;age;+1
+an old man;an old woman;age;-1
+an old man;a young man;human;-1
+an old man;a young woman;human;-1
+an old man;an old woman;human;-1
+an young man;an young woman;human;-1
+girl;boy;gender;+1
+girl;boy;young;-1
+girl;woman;gender;-1
+man;woman;gender;+1
+boy;man;gender;-1
+girl;man;gender;+1
+boy;woman;gender;+1
+son;daughter;gender;+1
+son;daughter;children;-1
+sea;mountain;nature;-1
+forest;mountain;nature;-1
+sea;house;nature;+1
+sea;software;nature;+1
+house;software;nature;-1
+sea;mountain;climbing;+1
+sea;river;climbing;-1
+human;dog;mammal;-1
+human;fish;mammal;+1
+dog;fish;mammal;+1
+bird;fish;mammal;-1
+man;woman;human;-1
+man;elephant;human;+1
+woman;elephant;human;+1
+dog;elephant;human;-1
+dog;lion;pet;+1
+cat;lion;pet;+1
+cat;dot;pet;-1
+car;orange;food;+1
+car;apple;food;+1
+orange;apple;food;-1
+car;book;food;-1
+car;orange;vehicle;+1
+car;grapes;vehicle;+1
+car;motorbike;vehicle;-1
+orange;apple;vehicle;-1

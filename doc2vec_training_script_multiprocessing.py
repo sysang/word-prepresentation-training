@@ -18,6 +18,7 @@ import uuid
 import pickle
 
 from doc2vec_service import query_semantic_distance
+from test_model import verify_infering_vector
 
 import logging
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
@@ -402,7 +403,7 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
     print("\n")
 
     # grab the file if not already local
-    questions_filenames = ['questions-words.txt', 'questions-words-narrowed.txt']
+    questions_filenames = ['questions-words-narrowed.txt']
     for questions_filename in questions_filenames:
         # Note: this analysis takes many minutes
         print("[+] " + questions_filename)
@@ -441,14 +442,22 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
 
     print("\n")
     print("-----------------------------------------------------")
+    print("Assess stability of inferencing vector")
+    print("-----------------------------------------------------")
+    print("\n")
+
+    verify_infering_vector(model=model)
+
+    print("\n")
+    print("-----------------------------------------------------")
     print("Benchmark similarity score with respect to theme word")
     print("-----------------------------------------------------")
     print("\n")
 
-    for epochs in [10, 20, 50, 100, 200]:
-        for threshold in [0.3, 0.4, 0.5, 0.6, 0.6, 0.8, 0.9, 1.0]:
-            with open('sentence_semantics_queries.csv', newline='') as f:
+    for epochs in [10, 20, 50, 75, 100, 200]:
+        for threshold in [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
 
+            with open('sentence_semantics_queries.csv', newline='') as f:
                 rows = csv.reader(f, delimiter=';', quotechar='|')
 
                 score = 0
@@ -468,16 +477,13 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
                         )
 
                     if direction > 0:
-                        # is_good = '[*]' if distance > threshold else ' ~ '
-                        score += 1 if sim > threshold else 0
+                        score += 1 if distance > threshold else 0
                     else:
-                        # is_good = '[*]' if distance < threshold else ' ~ '
                         score += 1 if distance < threshold else 0
 
-                    # print("%s %s - %s, distance score: %f, with respect to theme: %s" % (is_good, query, target, sim, theme))
-
-                print('<EPOCHS>: %d - THRESHOLD=%05.2f - SCORE=%05.2f' % (epochs, threshold,  100 * score / count))
-                print('\n')
+                if score > 50:
+                    print('<EPOCHS>: %d - THRESHOLD=%05.2f - SCORE=%05.2f' % (epochs, threshold,  100 * score / count))
+                    print('\n')
 
     print("\n")
     print("_____  COMPLETED  _________________________________")

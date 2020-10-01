@@ -24,3 +24,6 @@ train:
 
 check_dataset:
 	python3 dmc_d15_n18_w2_mc60_s0001_ech05_thefinal.py --check-dataset=1 --database=enwik8
+
+test_model:
+	python3 test_model.py --cmd=$(cmd)
