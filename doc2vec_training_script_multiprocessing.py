@@ -446,38 +446,38 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
     print("\n")
 
     for epochs in [10, 20, 50, 100, 200]:
-        with open('sentence_semantics_queries.csv', newline='') as f:
+        for threshold in [0.3, 0.4, 0.5, 0.6, 0.6, 0.8, 0.9, 1.0]:
+            with open('sentence_semantics_queries.csv', newline='') as f:
 
-            rows = csv.reader(f, delimiter=';', quotechar='|')
+                rows = csv.reader(f, delimiter=';', quotechar='|')
 
-            score = 0
-            count = 0
-            for row in rows:
-                count += 1
-                query = row[0]
-                target = row[1]
-                theme = row[2]
-                direction = float(row[3])
-                distance = query_semantic_distance(
-                        model=model,
-                        query=query,
-                        target=target,
-                        theme=theme,
-                        epochs=epochs,
-                    )
+                score = 0
+                count = 0
+                for row in rows:
+                    count += 1
+                    query = row[0]
+                    target = row[1]
+                    theme = row[2]
+                    direction = float(row[3])
+                    distance = query_semantic_distance(
+                            model=model,
+                            query=query,
+                            target=target,
+                            theme=theme,
+                            epochs=epochs,
+                        )
 
-                threshold = abs(direction)
-                if threshold > 0:
-                    is_good = '[*]' if distance > threshold else ' ~ '
-                    score += 1 if sim > threshold else 0
-                else:
-                    is_good = '[*]' if distance < threshold else ' ~ '
-                    score += 1 if distance < threshold else 0
+                    if direction > 0:
+                        # is_good = '[*]' if distance > threshold else ' ~ '
+                        score += 1 if sim > threshold else 0
+                    else:
+                        # is_good = '[*]' if distance < threshold else ' ~ '
+                        score += 1 if distance < threshold else 0
 
-                print("%s %s - %s, distance score: %f, with respect to theme: %s" % (is_good, query, target, sim, theme))
+                    # print("%s %s - %s, distance score: %f, with respect to theme: %s" % (is_good, query, target, sim, theme))
 
-            print('<EPOCHS>: %d - SCORE=%05.2f' % (epochs, 100 * score / count))
-            print('\n')
+                print('<EPOCHS>: %d - THRESHOLD=%05.2f - SCORE=%05.2f' % (epochs, threshold,  100 * score / count))
+                print('\n')
 
     print("\n")
     print("_____  COMPLETED  _________________________________")

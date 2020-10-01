@@ -1,4 +1,3 @@
-import time
 import csv
 import os
 import re
@@ -7,9 +6,6 @@ import numpy as np
 from gensim.models import Doc2Vec
 
 from doc2vec_service import query_semantic_distance
-
-# NOTES: epochs = 100, the value results in good result
-EPOCHS = 100
 
 
 def verify_infering_vector(_model, epochs=5, example=None):
@@ -38,17 +34,19 @@ def verify_infering_vector(_model, epochs=5, example=None):
     print('Average vector length: %f' % (length))
 
 
-def assess_the_rational_inference(model_fpath, order):
-    print("\n")
-    print("--------------------------------------------------------------------")
-    print('<FILE %d>: %s' % (order, str(model_fpath)))
-    print("--------------------------------------------------------------------")
+def assess_the_rational_inference(model_fpath, forder, hyperparameters):
 
     model = Doc2Vec.load(model_fpath)
+    has_result = False
 
-    for epochs in [10, 20, 50, 100, 200]:
+    for epochs, threshold in hyperparameters:
 
-        result = '\nEPOCHS=%d' % (epochs)
+        result = "\n"
+        result += "\n--------------------------------------------------------------------"
+        result += '\n<FILE %d>: %s' % (forder, str(model_fpath))
+        result += '\n<PARAMETERS>: EPOCHS=%d - THRESHOLD=%05.2f' % (epochs, threshold)
+        result += "\n--------------------------------------------------------------------"
+
         is_pass = True
         score = 0
         count = 0
@@ -72,7 +70,6 @@ def assess_the_rational_inference(model_fpath, order):
                     )
 
                 # threshold = abs(direction)
-                threshold = 0.4
                 if direction > 0:
                     is_good = '[*]' if distance > threshold else ' ~ '
                     is_pass = is_pass & (distance > threshold)
@@ -85,23 +82,43 @@ def assess_the_rational_inference(model_fpath, order):
                 result += "\n%s %s - %s, distance score: %f, with respect to theme: %s" % (is_good, query, target, distance, theme)
 
             score_percent = 100 * score / count
-            result += '\n<SCORE>: %05.2f' % (score_percent)
+            result += '\n<< SCORE>: %05.2f >>' % (score_percent)
             result += '\n* *** *  << PASSED >> * *** *' if is_pass else ''
-            if score_percent > 60:
+            if score_percent > 65:
+                has_result = True
                 print(result)
+
+    return has_result
 
 
 def assess_all_model():
-    order = 1
+
+    EPOCHS = [10, 20, 50, 100, 200]
+    THRESHOLD = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
+
+    hyperparameters = []
+    for ep in EPOCHS:
+        for thres in THRESHOLD:
+            hyperparameters.append((ep, thres))
+
+    forder = 1
     dirpath = 'models/'
     for f in os.listdir(dirpath):
         if re.match(r".+\.bin$", f):
             model_fpath = dirpath + f
-            assess_the_rational_inference(model_fpath, order)
-            order += 1
+            has_result = assess_the_rational_inference(
+                            model_fpath=model_fpath,
+                            forder=forder,
+                            hyperparameters=hyperparameters)
+            forder += 1
+
+            if not has_result:
+                print("\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n")
+                print("## Model has no result: %s ##\n" % (model_fpath))
+                print("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n")
 
 
 if __name__ == "__main__":
-    # verify_infering_vector(model, EPOCHS)
+    # NOTES: epochs = 100, the value results in good result
 
     assess_all_model()
