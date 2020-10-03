@@ -279,6 +279,6 @@ if __name__ == "__main__":
         verify_infering_vector(
                     model_fpath='models/dmc_d15_n30_w3_mc75_s00005_ech05_mal0002x20_blogwikgutimdb.bin',
                     epochs=3,
-                    nsamples=200,
+                    nsamples=300,
                     # example='a huge car'
                 )
