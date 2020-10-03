@@ -33,13 +33,13 @@ def verify_infering_vector(model_fpath=None, model=None, epochs=5, nsamples=300,
 
     vector = model_infer_vector(model=_model, tokens=tokens, epochs=epochs, nsamples=nsamples)
 
-    ntimes = 100
+    ntimes = 1000
     min = 1e6
     max = 0
     total_diff = 0
     now = time.time()
     differences = []
-    length = 0
+    total_length = 0
     for i in range(ntimes):
         __vec__ = model_infer_vector(model=_model, tokens=tokens, epochs=epochs, nsamples=nsamples)
         difference_vector = __vec__ - vector
@@ -48,21 +48,23 @@ def verify_infering_vector(model_fpath=None, model=None, epochs=5, nsamples=300,
         min = difference if difference < min else min
         max = difference if difference > max else max
         total_diff += difference
-        length = np.linalg.norm(__vec__)
+        total_length += np.linalg.norm(__vec__)
 
     averg_difference = total_diff / ntimes
-    relative = 100 * averg_difference / length
+    relative = 100 * total_diff / total_length
+    averg_range = 100 * ntimes * (max - min) / total_length
 
     standard_deviation = 0
     for diff in differences:
         standard_deviation += math.pow((diff - averg_difference), 2)
-    standard_deviation = standard_deviation / ntimes
+    deviation = math.sqrt(standard_deviation / ntimes)
+    averg_deviation = 100 * deviation * ntimes / total_length
 
-    print('Epochs=%d - nsamples=%d' % (epochs, nsamples))
-    print('Execution time: %f' % ((time.time() - now) / ntimes))
-    print('Difference - avg: %f; deviation: %f' % (averg_difference, standard_deviation))
-    print('Difference over vector length: %03.1f; avg length: %f' % (relative, length))
-    print('Difference - min: %f; max: %f' % (min, max))
+    print('Epochs=%d; nsamples=%d' % (epochs, nsamples))
+    print('Execution time: %05.3f(s)' % ((time.time() - now) / ntimes))
+    print('(Difference) diff/length: %f / %f = %05.2f(%%)' % (diff, total_length, relative))
+    print('(Difference) range: %05.2f(%%)' % (averg_range))
+    print('(Difference) deviation: %05.3f(%%)' % (averg_deviation))
 
 
 def assess_rational_inference(model, model_fpath, forder, epochs, threshold, baseline=65, is_silent=False):
@@ -176,7 +178,8 @@ def assess_stable_performance(model_fpath, forder=999, ntimes=10, baseline=50, i
         logger.info('\n')
         logger.info('Parameters: epochs=%d, threshold=%05.3f' % (epochs, threshold))
 
-        is_stable = True
+        unstable_level = math.ceil(ntimes - ntimes * 0.8)
+        failed_count = 0
         for i in range(ntimes):
             result, _ = assess_rational_inference(
                             model=model,
@@ -187,7 +190,11 @@ def assess_stable_performance(model_fpath, forder=999, ntimes=10, baseline=50, i
                             baseline=60,
                             is_silent=is_silent
                         )
-            is_stable = is_stable & result
+
+            if not result:
+                failed_count += 1
+            is_stable = failed_count <= unstable_level
+
             logger.info('<LOOP - %d> %s' % (i, str(result)))
 
             if not is_stable:
@@ -264,13 +271,14 @@ if __name__ == "__main__":
     if args.cmd == 1:
         register_logging_handler(logger, 'assess_stable_performance')
         assess_stable_performance(
-                    model_fpath='models/dmc_d15_n67_w5_mc99_s00005_ech05_mal0002x25_blogwikgutimdb.bin',
-                    ntimes=5,
-                    is_silent=True
+                    model_fpath='models/dmc_d15_n30_w3_mc75_s00005_ech05_mal0002x20_blogwikgutimdb.bin',
+                    ntimes=20,
+                    is_silent=False
                 )
     if args.cmd == 2:
         verify_infering_vector(
-                    model_fpath='models/dmc_d15_n67_w5_mc99_s00005_ech05_mal0002x25_blogwikgutimdb.bin',
+                    model_fpath='models/dmc_d15_n30_w3_mc75_s00005_ech05_mal0002x20_blogwikgutimdb.bin',
                     epochs=3,
+                    nsamples=200,
                     # example='a huge car'
                 )
