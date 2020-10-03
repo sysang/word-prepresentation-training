@@ -446,7 +446,7 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
     print("-----------------------------------------------------")
     print("\n")
 
-    verify_infering_vector(model=model)
+    verify_infering_vector(model=model, epochs=5, nsamples=300)
 
     print("\n")
     print("-----------------------------------------------------")
@@ -454,8 +454,12 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
     print("-----------------------------------------------------")
     print("\n")
 
-    for epochs in [10, 20, 50, 75, 100, 200]:
-        for threshold in [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
+    EPOCHS = [3]
+    THRESHOLD = np.arange(0.25, 0.35, 0.05)
+    ambigity_compensation = 0.1
+    confidence = 0
+    for epochs in EPOCHS:
+        for threshold in THRESHOLD:
 
             with open('sentence_semantics_queries.csv', newline='') as f:
                 rows = csv.reader(f, delimiter=';', quotechar='|')
@@ -467,7 +471,7 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
                     query = row[0]
                     target = row[1]
                     theme = row[2]
-                    direction = float(row[3])
+                    direction = float(row[3]) > 0  # determine how we infer meaning from comparison with threshold
                     distance = query_semantic_distance(
                             model=model,
                             query=query,
@@ -475,14 +479,20 @@ def train(common_kwargs, saved_fname, database, evaluate=False):
                             theme=theme,
                             epochs=epochs,
                         )
-
-                    if direction > 0:
-                        score += 1 if distance > threshold else 0
+                    is_true = False
+                    if distance > threshold * (1 + ambigity_compensation):
+                        is_true = direction
+                        score += 1 if is_true else 0
+                    elif distance < threshold * (1 - ambigity_compensation):
+                        is_true = not direction
+                        score += 1 if is_true else 0
                     else:
-                        score += 1 if distance < threshold else 0
+                        confidence -= 1
 
-                if score > 50:
-                    print('<EPOCHS>: %d - THRESHOLD=%05.2f - SCORE=%05.2f' % (epochs, threshold,  100 * score / count))
+                score_percent = 100 * score / count
+                confidence_percent = 100 * (confidence + count) / count
+                if score > 10:
+                    print('<EPOCHS: %d - THRESHOLD: %05.2f> - SCORE=%05.2f - CONFIDENCE=%05.2f' % (epochs, threshold,  score_percent, confidence_percent))
                     print('\n')
 
     print("\n")

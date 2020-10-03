@@ -3,6 +3,7 @@ import os
 import re
 import argparse
 import time
+import math
 
 import logging
 import pprint
@@ -17,7 +18,7 @@ from doc2vec_service import query_semantic_distance
 from doc2vec_service import model_infer_vector
 
 
-def verify_infering_vector(model_fpath=None, model=None, epochs=5, example=None):
+def verify_infering_vector(model_fpath=None, model=None, epochs=5, nsamples=300, example=None):
     if not example:
         example = "while driving down the street he sees a girl on a bicycle"
 
@@ -30,32 +31,38 @@ def verify_infering_vector(model_fpath=None, model=None, epochs=5, example=None)
     else:
         raise Exception("No model file path or model instance provided!")
 
-    vector = model_infer_vector(_model, tokens, epochs)
+    vector = model_infer_vector(model=_model, tokens=tokens, epochs=epochs, nsamples=nsamples)
 
     ntimes = 100
     min = 1e6
     max = 0
     total_diff = 0
-    length = 0
     now = time.time()
+    differences = []
+    length = 0
     for i in range(ntimes):
-        __vec__ = model_infer_vector(_model, tokens, epochs)
+        __vec__ = model_infer_vector(model=_model, tokens=tokens, epochs=epochs, nsamples=nsamples)
         difference_vector = __vec__ - vector
         difference = np.linalg.norm(difference_vector)
+        differences.append(difference)
         min = difference if difference < min else min
         max = difference if difference > max else max
         total_diff += difference
-        length += np.linalg.norm(vector)
+        length = np.linalg.norm(__vec__)
 
-    length = length / ntimes
     averg_difference = total_diff / ntimes
     relative = 100 * averg_difference / length
 
-    print('Epochs=%d' % epochs)
-    print('Difference - min: %f; max: %f; avg: %f' % (min, max, averg_difference))
-    print('Average length: %f' % (length))
-    print('Difference over vector length: %03.1f' % (relative))
+    standard_deviation = 0
+    for diff in differences:
+        standard_deviation += math.pow((diff - averg_difference), 2)
+    standard_deviation = standard_deviation / ntimes
+
+    print('Epochs=%d - nsamples=%d' % (epochs, nsamples))
     print('Execution time: %f' % ((time.time() - now) / ntimes))
+    print('Difference - avg: %f; deviation: %f' % (averg_difference, standard_deviation))
+    print('Difference over vector length: %03.1f; avg length: %f' % (relative, length))
+    print('Difference - min: %f; max: %f' % (min, max))
 
 
 def assess_rational_inference(model, model_fpath, forder, epochs, threshold, baseline=65, is_silent=False):
