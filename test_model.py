@@ -2,6 +2,7 @@ import csv
 import os
 import re
 import argparse
+import time
 
 import logging
 import pprint
@@ -13,9 +14,10 @@ import numpy as np
 from gensim.models import Doc2Vec
 
 from doc2vec_service import query_semantic_distance
+from doc2vec_service import model_infer_vector
 
 
-def verify_infering_vector(model_fpath=None, model=None, epochs=50, example=None):
+def verify_infering_vector(model_fpath=None, model=None, epochs=5, example=None):
     if not example:
         example = "while driving down the street he sees a girl on a bicycle"
 
@@ -28,15 +30,16 @@ def verify_infering_vector(model_fpath=None, model=None, epochs=50, example=None
     else:
         raise Exception("No model file path or model instance provided!")
 
-    vector = _model.infer_vector(tokens, epochs=epochs)
+    vector = model_infer_vector(_model, tokens, epochs)
 
-    ntimes = 10000
-    min = 100
+    ntimes = 100
+    min = 1e6
     max = 0
     total_diff = 0
     length = 0
+    now = time.time()
     for i in range(ntimes):
-        __vec__ = _model.infer_vector(tokens, epochs=epochs)
+        __vec__ = model_infer_vector(_model, tokens, epochs)
         difference_vector = __vec__ - vector
         difference = np.linalg.norm(difference_vector)
         min = difference if difference < min else min
@@ -52,13 +55,16 @@ def verify_infering_vector(model_fpath=None, model=None, epochs=50, example=None
     print('Difference - min: %f; max: %f; avg: %f' % (min, max, averg_difference))
     print('Average length: %f' % (length))
     print('Difference over vector length: %03.1f' % (relative))
+    print('Execution time: %f' % ((time.time() - now) / ntimes))
 
 
 def assess_rational_inference(model, model_fpath, forder, epochs, threshold, baseline=65, is_silent=False):
+    ambigity_compensation = 0.1
     has_result = False
     is_pass = False
     score = 0
     count = 0
+    confidence = 0
 
     info = "\n"
     info += "\n--------------------------------------------------------------------"
@@ -75,7 +81,7 @@ def assess_rational_inference(model, model_fpath, forder, epochs, threshold, bas
             query = row[0]
             target = row[1]
             theme = row[2]
-            direction = float(row[3])
+            direction = float(row[3]) > 0  # determine how we infer meaning from comparison with threshold
             distance = query_semantic_distance(
                     model=model,
                     query=query,
@@ -84,20 +90,27 @@ def assess_rational_inference(model, model_fpath, forder, epochs, threshold, bas
                     epochs=epochs,
                 )
 
-            # threshold = abs(direction)
-            if direction > 0:
-                is_good = '(*)' if distance > threshold else ' ~ '
-                score += 1 if distance > threshold else 0
+            is_true = False
+            not_sure = False
+            if distance > threshold * (1 + ambigity_compensation):
+                is_true = direction
+                score += 1 if is_true else 0
+            elif distance < threshold * (1 - ambigity_compensation):
+                is_true = not direction
+                score += 1 if is_true else 0
             else:
-                is_good = '(*)' if distance < threshold else ' ~ '
-                score += 1 if distance < threshold else 0
+                not_sure = True
+                confidence -= 1
 
-            info += "\n%s | %s :: %s | (wrt theme: %s), distance=%f" % (is_good, query, target, theme, distance)
+            indicator = ('(*)' if is_true else ' ~ ') if not not_sure else ' ? '
+            info += "\n%s | %s :: %s | (wrt theme: %s), distance=%f" % (indicator, query, target, theme, distance)
 
         score_percent = 100 * score / count
+        confidence_percent = 100 * (confidence + count) / count
         is_pass = score_percent > 89
 
         info += '\n<< SCORE: %05.2f >>' % (score_percent)
+        info += '\n<< CONFIDENCE: %05.2f >>' % (confidence_percent)
         info += '\n* *** *  << PASSED >> * *** *' if is_pass else ''
 
         # default value 65
@@ -112,7 +125,7 @@ def assess_rational_inference(model, model_fpath, forder, epochs, threshold, bas
 
 
 def setup_hyperparameters():
-    EPOCHS = [10, 20, 50, 75, 100, 150, 200]
+    EPOCHS = [3, 4, 5, 6]
     THRESHOLD = np.arange(0.25, 0.95, 0.025)
 
     hyperparameters = []
@@ -146,17 +159,17 @@ def assess_rational_inference_over_hyperparameters(model_fpath, forder):
     return has_result, max_score
 
 
-def assess_stable_performance(model_fpath, forder=999, ntimes=10, baseline=50):
+def assess_stable_performance(model_fpath, forder=999, ntimes=10, baseline=50, is_silent=True):
     model = Doc2Vec.load(model_fpath)
     hyperparameters = setup_hyperparameters()
 
-    is_stable = True
     logger.info(model_fpath)
     for epochs, threshold in hyperparameters:
 
         logger.info('\n')
         logger.info('Parameters: epochs=%d, threshold=%05.3f' % (epochs, threshold))
 
+        is_stable = True
         for i in range(ntimes):
             result, _ = assess_rational_inference(
                             model=model,
@@ -165,10 +178,13 @@ def assess_stable_performance(model_fpath, forder=999, ntimes=10, baseline=50):
                             epochs=epochs,
                             threshold=threshold,
                             baseline=60,
-                            is_silent=True
+                            is_silent=is_silent
                         )
             is_stable = is_stable & result
             logger.info('<LOOP - %d> %s' % (i, str(result)))
+
+            if not is_stable:
+                break
 
         if is_stable:
             print('\n')
@@ -242,11 +258,12 @@ if __name__ == "__main__":
         register_logging_handler(logger, 'assess_stable_performance')
         assess_stable_performance(
                     model_fpath='models/dmc_d15_n67_w5_mc99_s00005_ech05_mal0002x25_blogwikgutimdb.bin',
-                    ntimes=3
+                    ntimes=5,
+                    is_silent=True
                 )
-    if args.cmd == 3:
+    if args.cmd == 2:
         verify_infering_vector(
                     model_fpath='models/dmc_d15_n67_w5_mc99_s00005_ech05_mal0002x25_blogwikgutimdb.bin',
-                    epochs=50,
-                    example='a huge car'
+                    epochs=3,
+                    # example='a huge car'
                 )
